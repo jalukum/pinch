@@ -163,7 +163,8 @@ describe('edit mode', () => {
 describe('fussy sites', () => {
   it('flags known fussy domains', () => {
     expect(fussyFor('https://cooking.nytimes.com/recipes/1')?.name).toMatch(/NYT/)
-    expect(fussyFor('https://www.allrecipes.com/recipe/1/')).toBeTruthy()
+    expect(fussyFor('https://www.instagram.com/p/abc/')).toBeTruthy()
+    expect(fussyFor('https://www.allrecipes.com/recipe/1/')).toBeUndefined()
     expect(fussyFor('https://www.recipetineats.com/x/')).toBeUndefined()
   })
 })
