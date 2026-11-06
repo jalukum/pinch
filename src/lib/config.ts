@@ -2,9 +2,9 @@
  * Where Pinch fetches recipe pages from.
  *
  * After you deploy proxy/worker.js to Cloudflare, put its address here (or set VITE_RELAY_URL at build time),
- * for example 'https://pinch-relay.jalukum.workers.dev'. Until then the app falls back to public relays.
+ * for example 'https://pinch-relay.jaluku-pinch.workers.dev'. Until then the app falls back to public relays.
  */
-export const DEFAULT_RELAY = 'https://pinch-relay.YOUR-SUBDOMAIN.workers.dev'
+export const DEFAULT_RELAY = 'https://pinch-relay.jaluku-pinch.workers.dev'
 
 const fromEnv = (import.meta as any).env?.VITE_RELAY_URL as string | undefined
 
