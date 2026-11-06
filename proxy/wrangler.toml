@@ -1,0 +1,7 @@
+name = "pinch-relay"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Comma-separated list of the sites allowed to use this relay.
+ALLOWED_ORIGINS = "https://jalukum.github.io,http://localhost:5173,http://localhost:4173"

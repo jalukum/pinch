@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Pinch — a little recipe box</title>
+    <meta name="description" content="Paste any recipe link, get a beautiful recipe card, keep it forever." />
+    <meta name="theme-color" content="#efe4d2" />
+    <script>
+      // Set the theme before first paint (no flash). Modes: auto | light | dark.
+      ;(function () {
+        var d = document.documentElement, mq = window.matchMedia('(prefers-color-scheme: dark)')
+        function apply() {
+          var m = 'auto'
+          try { m = localStorage.getItem('pinch.theme') || 'auto' } catch (e) {}
+          var t = m === 'auto' ? (mq.matches ? 'dark' : 'light') : m
+          d.setAttribute('data-theme', t)
+          d.setAttribute('data-theme-mode', m)
+          var meta = document.querySelector('meta[name=theme-color]')
+          if (meta) meta.setAttribute('content', t === 'dark' ? '#1d1612' : '#efe4d2')
+        }
+        window.__pinchTheme = apply
+        apply()
+        mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply)
+      })()
+    </script>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Pinch" />
+    <meta name="format-detection" content="telephone=no" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./icons/icon-192.png" sizes="192x192" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash/splash-640x1136.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash/splash-750x1334.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1242x2208.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1125x2436.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="./splash/splash-828x1792.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1242x2688.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1170x2532.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1284x2778.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1179x2556.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1290x2796.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 402px) and (device-height: 874px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1206x2622.png" />
+    <link rel="apple-touch-startup-image" media="(device-width: 440px) and (device-height: 956px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="./splash/splash-1320x2868.png" />
+    <link rel="preload" href="./fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="./fonts/literata.woff2" as="font" type="font/woff2" crossorigin />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

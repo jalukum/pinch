@@ -1,0 +1,12 @@
+node_modules
+dist
+*.log
+.env
+.env.*
+!.env.example
+shots/
+*.local
+.DS_Store
+.wrangler/
+.dev.vars
+scripts/site-test-results.json
