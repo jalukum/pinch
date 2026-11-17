@@ -626,7 +626,9 @@ function VideoErrorNote({ status, onDismiss, onRetry, onUpload, onPasteText, onW
     ? 'You can paste the recipe text or write it in instead.'
     : status.platform === 'youtube' || status.platform === 'instagram' || status.platform === 'facebook'
       ? `${where} doesn’t share a video’s sound with apps like this. Save the video (or screen-record the cooking part) and upload it, and I’ll listen to the chef.`
-      : 'If the chef says the recipe out loud, save or screen-record the video and upload it.'
+      : status.kind === 'no-recipe'
+        ? 'If the recipe is on the creator’s website, open it there and paste that link instead.'
+        : 'If the chef says the recipe out loud, save or screen-record the video and upload it.'
   return (
     <div className="torn-note" role="alert">
       <Stamp text="OOPS" tone="ink" size="sm" rotate={6} />

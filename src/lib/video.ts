@@ -185,9 +185,16 @@ export async function recipeFromVideoLink(
   // 2. Write it from what the cook said + the caption.
   const description = cleanDescription(info.description || '')
   const transcript = words(info.transcript)
-  if (transcript.length + description.length < 25) {
-    throw new VideoError('no-recipe', info.note || 'There were no words to read on that video.', info.platform)
-  }
+  const elsewhere = /recipes?\b[^.\n]{0,25}?\b(?:on|at|@)\s+((?:www\.)?[a-z0-9-]+\.(?:com|net|org|co|co\.uk|blog|kitchen|recipes|food))\b/i.exec(info.description || '')?.[1]
+  const noRecipe = (heard: boolean) =>
+    elsewhere
+      ? `The caption says the recipe is on ${elsewhere.replace(/^www\./, '')}, but doesn’t link to the page.${heard ? ' And the chef doesn’t say it out loud.' : ''}`
+      : heard
+        ? 'I listened, but didn’t hear a recipe in that one.'
+        : info.platform === 'tiktok'
+          ? 'There’s no talking in this one, and the caption doesn’t have the recipe.'
+          : 'The description doesn’t include the recipe.'
+  if (transcript.length + description.length < 25) throw new VideoError('no-recipe', noRecipe(!!transcript), info.platform)
   opts.onStage?.(transcript ? 'writing' : 'writing', transcript ? 'heard' : 'caption')
   let rec: StructuredRecipe | undefined
   try {
@@ -206,7 +213,7 @@ export async function recipeFromVideoLink(
     throw e
   }
   if (!rec.is_recipe || (!rec.ingredients.length && !rec.steps.length)) {
-    throw new VideoError('no-recipe', transcript ? 'I listened, but didn’t hear a recipe in that one.' : (info.note || 'The caption doesn’t have the recipe in it.'), info.platform)
+    throw new VideoError('no-recipe', noRecipe(!!transcript), info.platform)
   }
   const recipe = toParsed(rec, { url: info.url, siteName: site, author: info.author, image: info.thumbnail, heard: !!transcript, fallbackTitle: info.title || description.split('\n')[0] })
   return { recipe, partial: !recipe.ingredients.length || !recipe.instructions.length, via: info.transcriptSource ? `video ${info.transcriptSource}` : 'video caption', info }
