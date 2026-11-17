@@ -4,6 +4,7 @@
  *   GET /fetch?url=<recipe page>  → the page HTML (header X-Final-Url = URL after redirects)
  *   GET /img?url=<image>          → the image bytes, with CORS headers, so photos can be cached offline
  *   GET /                         → "ok" health check
+ *   GET /video, POST /transcribe, POST /structure → cooking videos to recipe text (see video.js)
  *
  * Safety:
  *   - only public http(s) hosts are fetched
@@ -11,6 +12,8 @@
  *   - only the app's own origins may call it (ALLOWED_ORIGINS, comma-separated, set in wrangler.toml or the dashboard)
  *   - it sends ordinary browser request headers and does not solve captchas or fake any identity beyond a normal browser visit
  */
+
+import { handleVideo } from './video.js'
 
 const DEFAULT_ORIGINS = 'https://jalukum.github.io,http://localhost:5173,http://localhost:4173'
 const MAX_BYTES = 5 * 1024 * 1024
@@ -276,7 +279,7 @@ function wprmToJsonLd(j, post) {
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Expose-Headers': 'X-Final-Url, X-Upstream-Status, X-Pinch-Source, X-Pinch-Tried',
     'Vary': 'Origin',
@@ -293,10 +296,14 @@ export async function handle(request, env = {}) {
   const reply = (body, status, extra = {}) => new Response(body, { status, headers: { ...cors, 'Content-Type': 'text/plain; charset=utf-8', ...extra } })
 
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { ...cors, 'Access-Control-Max-Age': '86400' } })
-  if (request.method !== 'GET') return reply('GET only', 405)
-
   const u = new URL(request.url)
   const path = u.pathname.replace(/\/+$/, '').split('/').pop() || ''
+  if (path === 'video' || path === 'transcribe' || path === 'structure') {
+    if (!callerOk) return reply('This relay only answers its own app.', 403)
+    if ((path === 'video') !== (request.method === 'GET')) return reply(path === 'video' ? 'GET only' : 'POST only', 405)
+    return handleVideo(path, request, env, cors, isPublicUrl)
+  }
+  if (request.method !== 'GET') return reply('GET only', 405)
   if (path === '' && !u.searchParams.has('url')) return reply('ok', 200)
   if (!callerOk) return reply('This relay only answers its own app.', 403)
 

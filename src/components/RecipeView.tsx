@@ -183,7 +183,7 @@ export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDele
 
       <header className="recipe__head">
         <p className="kicker">
-          {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer">from {r.siteName || 'the web'} <IconLink size={14} /></a> : <span>written by hand</span>}
+          {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer">from {r.siteName || 'the web'} <IconLink size={14} /></a> : <span>{r.extractedVia === 'video' ? 'heard in your video' : 'written by hand'}</span>}
         </p>
         <h1 id="recipe-title" className="recipe__title">{r.title}</h1>
         {r.author && <p className="byline">by {r.author}</p>}

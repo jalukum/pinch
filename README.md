@@ -54,6 +54,28 @@ fetches recipe pages for it. Nothing runs on any machine of ours.
 
 Unit tests (`npm test`) cover every pattern above: each plugin, RDFa, `__NEXT_DATA__`, headings, pasted text, page basics, AMP/print links and the editor round-trip.
 
+## Cooking videos
+
+Paste a YouTube (Shorts too), TikTok or Instagram link into the same box, or tap **Upload a video**.
+
+| Source | What Pinch reads |
+|---|---|
+| **TikTok** | The caption plus TikTok's own subtitles (what the chef says). If a TikTok has no subtitles, the relay listens to it with Whisper. |
+| **YouTube / Shorts** | The description, and the written recipe it links to (read with the normal extractor). YouTube refuses captions and audio to cloud servers ("Sign in to confirm you're not a bot"), so a recipe that's only spoken needs an upload. |
+| **Instagram reels** | The post caption from the public embed. Reel audio is behind a login, so spoken-only recipes need an upload. |
+| **Facebook** | Nothing (login wall). Upload instead. |
+| **Upload** (camera roll, screen recording, Files) | The sound is decoded on the phone into 2-minute 16 kHz clips, transcribed by the relay (Whisper), then written up. A still near the end becomes the card's photo. Up to 40 minutes. |
+
+The card is written by the relay's `/structure` route (Workers AI, Llama 3.3 70B, strict JSON schema). It may only use
+ingredients that appear in the transcript or caption; anything else is dropped by a word check afterwards. Amounts the
+cook never says are kept as said ("a splash of milk") and listed gently in a note. Code: `src/lib/video.ts`, `proxy/video.js`.
+`BASE=<app url> node scripts/video-test.mjs [video.mp4]` runs the live end-to-end check.
+
+**Free-tier limits.** Workers AI gives 10,000 neurons a day free (resets 00:00 UTC = 6 pm Central). Roughly: Whisper ≈ 46
+neurons per minute of audio, writing a card ≈ 40–250. So about 3 hours of listening a day, or hundreds of caption-based
+cards. When it runs out, Pinch says so; a caption that already holds a full written recipe is still sorted the old way.
+Answers are edge-cached (videos 6 h, cards 7 days), so re-pasting the same link costs nothing.
+
 ## Themes
 
 The theme stamp in the header cycles **Auto → Day → Night**. The choice is stored in `localStorage` (`pinch.theme`), and a tiny pre-paint script applies it before first paint, so there's no flash. It also updates `<meta name="theme-color">`.

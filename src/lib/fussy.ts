@@ -16,8 +16,9 @@ export const FUSSY: Fussy[] = [
   { name: 'America’s Test Kitchen, Cook’s Illustrated, Cook’s Country', match: /(^|\.)(americastestkitchen|cooksillustrated|cookscountry)\.com$/, why: 'members-only pages' },
   { name: 'Milk Street', match: /(^|\.)177milkstreet\.com$/, why: 'members-only pages' },
   { name: 'Bon Appétit', match: /(^|\.)bonappetit\.com$/, why: 'sometimes paywalled; the free ones usually work' },
-  { name: 'Instagram, TikTok, Facebook & Pinterest posts', match: /(^|\.)(instagram\.com|tiktok\.com|facebook\.com|fb\.watch|pinterest\.[a-z.]+|pin\.it)$/, why: 'the recipe is in a caption or video behind a login, not on a page' },
-  { name: 'YouTube videos', match: /(^|\.)(youtube\.com|youtu\.be)$/, why: 'the recipe is spoken, not written down' },
+  { name: 'YouTube videos', match: /(^|\.)(youtube\.com|youtu\.be)$/, why: 'YouTube doesn’t share captions or sound with apps, so Pinch reads the description and any recipe link in it. If the recipe is only spoken, upload the video' },
+  { name: 'Instagram reels', match: /(^|\.)(instagram\.com|instagr\.am)$/, why: 'the caption is read, but reel sound sits behind a login. If the recipe is only spoken, upload the video' },
+  { name: 'Facebook & Pinterest posts', match: /(^|\.)(facebook\.com|fb\.watch|pinterest\.[a-z.]+|pin\.it)$/, why: 'the recipe is in a post behind a login, not on a page' },
 ]
 
 export function fussyFor(url: string): Fussy | undefined {

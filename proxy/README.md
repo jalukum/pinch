@@ -12,6 +12,9 @@ app doesn't depend on any server of ours.
 | `GET /fetch?url=<page>` | the page HTML. Headers: `X-Final-Url` (after redirects), `X-Pinch-Source` (`live`, `amp`, `print`, `wp-json`, `wp-recipe-maker`, `wayback`), `X-Pinch-Tried` (each attempt), `X-Upstream-Status` |
 | `GET /img?url=<image>` | the image bytes with CORS headers, so photos can be cached for offline use |
 | `GET /` | `ok` |
+| `GET /video?url=<video>` | JSON for a YouTube/TikTok/Instagram link: title, author, description, thumbnail, recipe links, and a `transcript` (TikTok subtitles, or Whisper on the TikTok's audio) |
+| `POST /transcribe` | body: base64 audio/video clip (≤ 14 MB of base64) → `{ text }` via Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) |
+| `POST /structure` | body: `{ title, description, transcript }` → `{ recipe }` via Workers AI (`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, JSON schema) |
 
 For each page it tries, in order, and stops at the first one with a real page:
 
@@ -27,6 +30,11 @@ responses are cached at Cloudflare's edge: pages for 30 min, images for a day.
 It stays within what a normal browser visit does. It doesn't solve captchas, get around paywalls or
 logins, use anyone's cookies, or pretend to be Googlebot. If a site refuses ordinary visitors, Pinch
 offers **Paste the recipe text** or **Write it by hand** instead.
+
+The video routes need the **Workers AI binding** (`[ai] binding = "AI"` in `wrangler.toml`, already set) and use the
+free daily allowance (10,000 neurons). Dashboard deploys: **Settings → Bindings → Add → Workers AI**, variable name `AI`.
+They read videos only as a signed-out visitor would; YouTube and Instagram don't hand audio to servers, so the app
+offers an upload for those.
 
 ## Deploy option A: wrangler (about 2 minutes)
 

@@ -1,6 +1,11 @@
 name = "pinch-relay"
 main = "worker.js"
 compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Workers AI (free daily allowance): Whisper for listening, Llama for writing the card. See video.js.
+[ai]
+binding = "AI"
 
 [vars]
 # Comma-separated list of the sites allowed to use this relay.

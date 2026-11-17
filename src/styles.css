@@ -762,3 +762,5 @@ textarea { font: inherit; }
 .fussy__list b { display: block; font-weight: 600; font-size: 16px; }
 .fussy__list span { font-size: 14.5px; color: var(--ink-2); }
 .fussy .hand-note { margin: 0 0 12px; }
+.fussy__sub { font-family: var(--display); font-size: 19px; font-weight: 600; margin: 18px 0 4px; }
+.fussy .muted + .hand-note { margin-top: 2px; }

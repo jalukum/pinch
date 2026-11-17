@@ -5,6 +5,7 @@ import { fromText } from './lib/parse'
 import { blankRecipe } from './lib/edit'
 import { FUSSY, fussyFor } from './lib/fussy'
 import { relayBase } from './lib/config'
+import { videoPlatform, recipeFromVideoLink, recipeFromVideoFile, VideoError, PLATFORM_NAME, type VideoStage, type VideoErrorKind, type VideoPlatform } from './lib/video'
 import { store, newId, requestPersistence, validateBackup, type Backup } from './lib/storage'
 import { cacheImage } from './lib/image'
 import { formatMinutes } from './lib/duration'
@@ -15,7 +16,7 @@ import { Editor, PasteText } from './components/Editor'
 import { ThemeToggle } from './components/ThemeToggle'
 import { Backdrop } from './components/Backdrop'
 import { Divider, EmptyArt, Stamp, SvgDefs, Tape } from './components/Ornaments'
-import { IconBox, IconClip, IconClock, IconNote, IconPencil, IconWhisk } from './components/Icons'
+import { IconBox, IconClip, IconClock, IconFilm, IconNote, IconPencil, IconWhisk } from './components/Icons'
 
 type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' }
 
@@ -29,8 +30,20 @@ function readRoute(): Route {
 
 type Status =
   | { s: 'idle' }
-  | { s: 'loading'; url: string; step: number }
+  | { s: 'loading'; url: string; step: number; line?: string; sub?: string }
   | { s: 'error'; url: string; kind: ExtractError['kind'] | 'bad-url'; attempts: Attempt[] }
+  | { s: 'video-error'; url: string; kind: VideoErrorKind; message: string; platform?: VideoPlatform; file?: boolean }
+
+/** What the loading card says while a video is being read. */
+function videoLine(stage: VideoStage, detail?: string, platform?: VideoPlatform | null): { line: string; sub?: string } {
+  switch (stage) {
+    case 'finding': return { line: `Finding the ${platform === 'tiktok' ? 'TikTok' : platform === 'instagram' ? 'reel' : 'video'}…` }
+    case 'recipe-page': return { line: 'The chef wrote it down too…', sub: detail }
+    case 'opening': return { line: 'Opening the video…', sub: detail }
+    case 'listening': return { line: 'Listening to the chef…', sub: detail }
+    case 'writing': return { line: detail === 'caption' ? 'Reading the caption…' : 'Writing down what they said…' }
+  }
+}
 
 const LOADING_LINES = ['Fetching the page…', 'Knocking on the kitchen door…', 'Trying the side entrance…', 'Reading the recipe card…', 'Still stirring…', 'One last try…']
 
@@ -49,6 +62,7 @@ export default function App() {
   const [editing, setEditing] = useState<{ recipe: Recipe; isNew: boolean } | null>(null)
   const [pasteFor, setPasteFor] = useState<string | null>(null) // null = closed; '' = no link
   const [fussyOpen, setFussyOpen] = useState(false)
+  const videoInput = useRef<HTMLInputElement>(null)
   const abort = useRef<AbortController | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -96,6 +110,28 @@ export default function App() {
       abort.current?.abort()
       const ctl = new AbortController()
       abort.current = ctl
+      const platform = videoPlatform(url)
+      if (platform) {
+        setStatus({ s: 'loading', url, step: 0, ...videoLine('finding', undefined, platform) })
+        try {
+          const { recipe, partial, via } = await recipeFromVideoLink(url, {
+            signal: ctl.signal,
+            onStage: (st, d) => setStatus((cur) => (cur.s === 'loading' ? { ...cur, ...videoLine(st, d, platform) } : cur)),
+          })
+          if (ctl.signal.aborted) return
+          console.info('[pinch] video via', via)
+          setDraft({ ...recipe, id: newId() })
+          setDraftPartial(partial)
+          setStatus({ s: 'idle' })
+          setInput('')
+          go('#/new')
+        } catch (e: any) {
+          if (ctl.signal.aborted) return
+          const err = e instanceof VideoError ? e : new VideoError('unavailable', String(e?.message || e), platform)
+          setStatus({ s: 'video-error', url, kind: err.kind, message: err.message, platform: err.platform || platform })
+        }
+        return
+      }
       setStatus({ s: 'loading', url, step: 0 })
       try {
         const { recipe, attempts, via, partial } = await extractRecipe(url, {
@@ -144,6 +180,31 @@ export default function App() {
       document.getElementById('paste-input')?.focus()
     }
   }
+
+  /** A video file from the camera roll / Files → listen → card. */
+  const uploadVideo = async (file: File) => {
+    abort.current?.abort()
+    const ctl = new AbortController()
+    abort.current = ctl
+    const label = file.name || 'your video'
+    setStatus({ s: 'loading', url: '', step: 0, ...videoLine('opening', label) })
+    try {
+      const { recipe, partial } = await recipeFromVideoFile(file, {
+        signal: ctl.signal,
+        onStage: (st, d) => setStatus((cur) => (cur.s === 'loading' ? { ...cur, ...videoLine(st, d ?? (st === 'opening' ? label : undefined)) } : cur)),
+      })
+      if (ctl.signal.aborted) return
+      setDraft({ ...recipe, id: newId() })
+      setDraftPartial(partial)
+      setStatus({ s: 'idle' })
+      go('#/new')
+    } catch (e: any) {
+      if (ctl.signal.aborted) return
+      const err = e instanceof VideoError ? e : new VideoError('no-audio', String(e?.message || e))
+      setStatus({ s: 'video-error', url: '', kind: err.kind, message: err.message, file: true })
+    }
+  }
+  const pickVideo = () => videoInput.current?.click()
 
   const save = async (r: Recipe) => {
     const rec: Recipe = { ...r, savedAt: Date.now() }
@@ -280,6 +341,7 @@ export default function App() {
         onPasteText={(u) => setPasteFor(u)}
         onWrite={writeByHand}
         onFussy={() => setFussyOpen(true)}
+        onUpload={pickVideo}
       />
     )
   }
@@ -315,6 +377,21 @@ export default function App() {
         <Settings recipes={recipes} onExport={exportBackup} onImport={importBackup} onClose={() => setSettings(false)} onFussy={() => { setSettings(false); setFussyOpen(true) }} />
       </Sheet>
 
+      <input
+        ref={videoInput}
+        type="file"
+        accept="video/*,audio/*,.mp4,.mov,.m4a,.mp3,.webm"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (f) {
+            if (route.name !== 'home') go('#/')
+            uploadVideo(f)
+          }
+        }}
+      />
+
       <div className={`toast ${toastMsg ? 'is-on' : ''}`} role="status" aria-live="polite">{toastMsg}</div>
     </>
   )
@@ -337,8 +414,10 @@ function Home(p: {
   onPasteText: (url: string) => void
   onWrite: (url?: string) => void
   onFussy: () => void
+  onUpload: () => void
 }) {
   const loading = p.status.s === 'loading'
+  const failed = p.status.s === 'error' || p.status.s === 'video-error'
   return (
     <div className="home">
       <header className="masthead">
@@ -359,7 +438,7 @@ function Home(p: {
           <strong>{String(p.recipes.length + 1).padStart(3, '0')}</strong>
         </div>
         <div className="ticket__body">
-          <label htmlFor="paste-input" className="ticket__label">Paste a recipe link</label>
+          <label htmlFor="paste-input" className="ticket__label">Paste a recipe or video link</label>
           <input
             id="paste-input"
             type="url"
@@ -385,9 +464,11 @@ function Home(p: {
         </div>
       </form>
 
-      {!loading && p.status.s !== 'error' && (
+      {!loading && !failed && (
         <p className="other-ways">
           <button className="inline-link" onClick={() => p.onPasteText('')}><IconNote size={16} /> Paste the recipe text</button>
+          <span aria-hidden>·</span>
+          <button className="inline-link" onClick={p.onUpload}><IconFilm size={16} /> Upload a video</button>
           <span aria-hidden>·</span>
           <button className="inline-link" onClick={() => p.onWrite()}><IconPencil size={16} /> Write one by hand</button>
           <span aria-hidden>·</span>
@@ -395,7 +476,8 @@ function Home(p: {
         </p>
       )}
 
-      {p.status.s === 'loading' && <Loading url={p.status.url} step={p.status.step} onCancel={p.onCancel} />}
+      {p.status.s === 'loading' && <Loading url={p.status.url} step={p.status.step} line={p.status.line} sub={p.status.sub} onCancel={p.onCancel} />}
+      {p.status.s === 'video-error' && <VideoErrorNote status={p.status} onDismiss={p.onDismiss} onRetry={p.onSubmit} onUpload={p.onUpload} onPasteText={p.onPasteText} onWrite={p.onWrite} />}
       {p.status.s === 'error' && <ErrorNote status={p.status} onDismiss={p.onDismiss} onRetry={p.onSubmit} onPasteText={p.onPasteText} onWrite={p.onWrite} onFussy={p.onFussy} />}
 
       <section className="box" aria-labelledby="box-h">
@@ -409,7 +491,7 @@ function Home(p: {
         {p.loaded && p.recipes.length === 0 && p.status.s !== 'loading' && (
           <div className="empty">
             <EmptyArt />
-            <p className="hand">Nothing filed yet — paste a link from any recipe site and I’ll write you a proper card.</p>
+            <p className="hand">Nothing filed yet — paste a link from any recipe site or cooking video and I’ll write you a proper card.</p>
           </div>
         )}
 
@@ -444,20 +526,20 @@ function Home(p: {
   )
 }
 
-function Loading({ url, step, onCancel }: { url: string; step: number; onCancel: () => void }) {
+function Loading({ url, step, line: fixed, sub, onCancel }: { url: string; step: number; line?: string; sub?: string; onCancel: () => void }) {
   const [tick, setTick] = useState(0)
   useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 2600)
     return () => clearInterval(t)
   }, [])
-  const line = LOADING_LINES[Math.min(LOADING_LINES.length - 1, Math.max(step, Math.floor(tick / 2)))]
+  const line = fixed || LOADING_LINES[Math.min(LOADING_LINES.length - 1, Math.max(step, Math.floor(tick / 2)))]
   return (
     <div className="loading-card" role="status" aria-live="polite">
       <div className="loading-card__top">
         <span className="whisk-spin"><IconWhisk size={30} /></span>
         <div>
           <p className="typewriter">{line}<span className="caret" /></p>
-          <p className="loading-card__url">{hostLabel(url)}</p>
+          <p className="loading-card__url">{sub || (url ? hostLabel(url) : '')}</p>
         </div>
       </div>
       <div className="pencil-lines" aria-hidden>
@@ -520,6 +602,50 @@ function ErrorNote({ status, onDismiss, onRetry, onPasteText, onWrite, onFussy }
   )
 }
 
+function VideoErrorNote({ status, onDismiss, onRetry, onUpload, onPasteText, onWrite }: {
+  status: Extract<Status, { s: 'video-error' }>
+  onDismiss: () => void
+  onRetry: () => void
+  onUpload: () => void
+  onPasteText: (url: string) => void
+  onWrite: (url?: string) => void
+}) {
+  const where = status.platform ? PLATFORM_NAME[status.platform] : 'that video'
+  const head: Record<VideoErrorKind, string> = {
+    'no-relay': 'Videos need the relay.',
+    offline: 'You’re offline.',
+    unavailable: `${status.file ? 'That video' : where} didn’t open.`,
+    'no-recipe': 'No recipe in there.',
+    quota: 'Out of listening time for today.',
+    'too-long': 'That one’s a bit long.',
+    unsupported: `${where} keeps its videos locked.`,
+    'no-audio': 'Couldn’t hear that one.',
+    cancelled: 'Stopped.',
+  }
+  const tip = status.file
+    ? 'You can paste the recipe text or write it in instead.'
+    : status.platform === 'youtube' || status.platform === 'instagram' || status.platform === 'facebook'
+      ? `${where} doesn’t share a video’s sound with apps like this. Save the video (or screen-record the cooking part) and upload it, and I’ll listen to the chef.`
+      : 'If the chef says the recipe out loud, save or screen-record the video and upload it.'
+  return (
+    <div className="torn-note" role="alert">
+      <Stamp text="OOPS" tone="ink" size="sm" rotate={6} />
+      <h3>{head[status.kind]}</h3>
+      <p>{status.message}</p>
+      {status.kind !== 'quota' && status.kind !== 'offline' && <p className="fussy-hint">{tip}</p>}
+      <div className="torn-note__ways">
+        {status.kind !== 'quota' && <button className="btn" onClick={onUpload}><IconFilm size={18} /> {status.file ? 'Try another video' : 'Upload the video'}</button>}
+        <button className="btn btn--quiet" onClick={() => onPasteText(status.url)}><IconNote size={18} /> Paste the text</button>
+      </div>
+      <div className="torn-note__actions">
+        {!status.file && status.kind !== 'no-recipe' && status.kind !== 'unsupported' && <button className="link-btn" onClick={onRetry}>Try the link again</button>}
+        <button className="link-btn" onClick={() => onWrite(status.url)}>Write by hand</button>
+        <button className="link-btn" onClick={onDismiss}>Dismiss</button>
+      </div>
+    </div>
+  )
+}
+
 function FussyNote({ onClose }: { onClose: () => void }) {
   return (
     <div className="fussy">
@@ -531,6 +657,9 @@ function FussyNote({ onClose }: { onClose: () => void }) {
         ))}
       </ul>
       <p className="hand-note">For these, open the recipe in Safari, tap aA → Show Reader, select all, copy, then choose “Paste the recipe text”. Or write the card by hand.</p>
+      <h3 className="fussy__sub">Cooking videos</h3>
+      <p className="muted">Paste a TikTok, YouTube (Shorts too) or Instagram link. TikToks work best: Pinch reads the caption and listens to the chef. YouTube and Instagram only share the description, so Pinch uses that, or the written recipe it links to.</p>
+      <p className="hand-note">Recipe only spoken out loud? Save the video, or screen-record the cooking part, then tap “Upload a video” and Pinch will listen to it.</p>
       <div className="sheet__actions">
         <button className="btn btn--quiet" onClick={onClose}>Got it</button>
       </div>
