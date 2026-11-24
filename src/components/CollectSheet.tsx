@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Collection } from '../lib/storage'
 import { IconPlus, IconTrash } from './Icons'
+import { FolderGlyph, IconPicker, folderIconOf, type FolderIconId } from './FolderIcons'
 
 /** File one or more cards under existing folders, or start a new one. */
 export function CollectSheet({
@@ -15,18 +16,20 @@ export function CollectSheet({
   selected: string[]
   inIds: (id: string) => boolean | 'some'
   onToggle: (id: string, on: boolean) => void
-  onCreate: (name: string) => void
+  onCreate: (name: string, icon: FolderIconId) => void
   onClose: () => void
 }) {
   const [adding, setAdding] = useState(selected.length === 0)
   const [name, setName] = useState('')
+  const [icon, setIcon] = useState<FolderIconId>('star')
   const n = selected.length
   const filing = n > 0
   const create = () => {
     const t = name.trim()
     if (!t) return
-    onCreate(t)
+    onCreate(t, icon)
     setName('')
+    setIcon('star')
     setAdding(false)
   }
   return (
@@ -49,6 +52,7 @@ export function CollectSheet({
                 <span className="check__box" aria-hidden>
                   <svg viewBox="0 0 24 24"><path d="M5 12.8c1.4 1.4 2.8 2.9 4.1 4.4 3.2-3.8 6.4-7.5 9.9-11" /></svg>
                 </span>
+                <span className="collect__mark" aria-hidden><FolderGlyph id={folderIconOf(c)} size={18} /></span>
                 <span className="check__text">{c.name}</span>
                 <span className="collect__n">{c.recipeIds.length}</span>
               </label>
@@ -68,6 +72,7 @@ export function CollectSheet({
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Desserts, weeknight…" autoFocus />
           </label>
+          <IconPicker value={icon} onChange={setIcon} />
           <div className="sheet__actions">
             <button type="button" className="btn btn--quiet" onClick={() => setAdding(false)}>Cancel</button>
             <button type="submit" className="btn" disabled={!name.trim()}>Start folder</button>
@@ -75,7 +80,7 @@ export function CollectSheet({
         </form>
       ) : (
         <div className="sheet__actions">
-          <button className="btn btn--quiet" onClick={() => setAdding(true)}><IconPlus size={16} /> New folder</button>
+          <button className="btn btn--quiet" onClick={() => { setAdding(true); setIcon('star') }}><IconPlus size={16} /> New folder</button>
           <button className="btn" onClick={onClose}>Done</button>
         </div>
       )}
@@ -85,17 +90,19 @@ export function CollectSheet({
 
 export function ManageCollection({
   collection,
-  onRename,
+  onSave,
   onDelete,
   onClose,
 }: {
   collection: Collection
-  onRename: (name: string) => void
+  onSave: (name: string, icon: FolderIconId) => void
   onDelete: () => void
   onClose: () => void
 }) {
   const [name, setName] = useState(collection.name)
+  const [icon, setIcon] = useState<FolderIconId>(folderIconOf(collection))
   const [sure, setSure] = useState(false)
+  const dirty = name.trim() !== collection.name || icon !== folderIconOf(collection)
   return (
     <div className="collect">
       <h2>This folder</h2>
@@ -103,6 +110,7 @@ export function ManageCollection({
         <span>Name</span>
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
+      <IconPicker value={icon} onChange={setIcon} />
       {sure ? (
         <p className="muted">Remove “{collection.name}”? The cards stay in the box; only the folder goes.</p>
       ) : null}
@@ -117,10 +125,10 @@ export function ManageCollection({
             <button className="btn btn--quiet" onClick={() => setSure(true)}>Remove</button>
             <button
               className="btn"
-              disabled={!name.trim() || name.trim() === collection.name}
-              onClick={() => { onRename(name.trim()); onClose() }}
+              disabled={!name.trim() || !dirty}
+              onClick={() => { onSave(name.trim(), icon); onClose() }}
             >
-              Save name
+              Save
             </button>
             <button className="btn btn--quiet" onClick={onClose}>Close</button>
           </>

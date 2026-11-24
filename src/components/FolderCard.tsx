@@ -1,5 +1,6 @@
 import type { Recipe } from '../lib/types'
 import { IconPlus, IconWhisk } from './Icons'
+import { FolderGlyph, type FolderGlyphId } from './FolderIcons'
 
 export type FolderTone = 'olive' | 'sage' | 'mustard' | 'rose' | 'terracotta'
 
@@ -7,12 +8,13 @@ export function folderTone(i: number): FolderTone {
   return (['mustard', 'rose', 'olive', 'sage', 'terracotta'] as FolderTone[])[i % 5]
 }
 
-/** A manila folder card: tab, name, count, and little peeks of what’s inside. */
+/** A manila folder card: tab, mark, count, and little peeks of what’s inside. */
 export function FolderCard({
   name,
   count,
   recipes,
   tone = 'mustard',
+  icon,
   onClick,
   fresh,
 }: {
@@ -20,6 +22,7 @@ export function FolderCard({
   count: number
   recipes: Recipe[]
   tone?: FolderTone
+  icon?: FolderGlyphId
   onClick: () => void
   fresh?: boolean
 }) {
@@ -38,14 +41,17 @@ export function FolderCard({
     <button type="button" className={`folder-card is-${tone}`} onClick={onClick} aria-label={`${name}, ${count} card${count === 1 ? '' : 's'}`}>
       <span className="folder-card__tab">{name}</span>
       <span className="folder-card__body">
-        <span className="folder-card__peeks" aria-hidden>
-          {peeks.length ? peeks.map((r, i) => (
-            <span key={r.id} className="peek" style={{ ['--i' as any]: i }}>
-              {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" /> : <IconWhisk size={16} />}
-            </span>
-          )) : (
-            <span className="folder-card__empty">empty</span>
-          )}
+        <span className="folder-card__row">
+          {icon && <span className="folder-card__glyph"><FolderGlyph id={icon} size={26} /></span>}
+          <span className="folder-card__peeks" aria-hidden>
+            {peeks.length ? peeks.map((r, i) => (
+              <span key={r.id} className="peek" style={{ ['--i' as any]: i }}>
+                {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" /> : <IconWhisk size={16} />}
+              </span>
+            )) : (
+              <span className="folder-card__empty">empty</span>
+            )}
+          </span>
         </span>
         <span className="folder-card__n">{count} card{count === 1 ? '' : 's'}</span>
       </span>

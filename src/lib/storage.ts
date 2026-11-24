@@ -1,4 +1,5 @@
 import type { Recipe } from './types'
+import { isFolderIcon } from './folder-icons'
 
 const DB = 'pinch'
 const DB_VER = 2
@@ -11,6 +12,7 @@ export interface Collection {
   name: string
   createdAt: number
   recipeIds: string[]
+  icon?: string
 }
 
 function db(): Promise<IDBDatabase> {
@@ -99,6 +101,7 @@ export function collectionsFromBackup(data: any): Collection[] {
       name: String(c.name).trim() || 'Untitled',
       createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
       recipeIds: c.recipeIds.map(String).filter(Boolean),
+      icon: isFolderIcon(c.icon) ? c.icon : undefined,
     }))
 }
 

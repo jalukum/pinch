@@ -15,6 +15,7 @@ import { RecipeView } from './components/RecipeView'
 import { ShoppingList } from './components/ShoppingList'
 import { CollectSheet, ManageCollection } from './components/CollectSheet'
 import { FolderCard, folderTone } from './components/FolderCard'
+import { FolderGlyph, folderIconOf, type FolderIconId } from './components/FolderIcons'
 import { Sheet } from './components/Sheet'
 import { Editor, PasteText } from './components/Editor'
 import { ThemeToggle } from './components/ThemeToggle'
@@ -319,8 +320,8 @@ export default function App() {
 
   const defaultServings = (r: Recipe) => (r.servings && r.servings > 0 ? r.servings : 1)
 
-  const createCollection = async (name: string, recipeIds: string[] = []) => {
-    const c: Collection = { id: newId(), name, createdAt: Date.now(), recipeIds: [...new Set(recipeIds)] }
+  const createCollection = async (name: string, recipeIds: string[] = [], icon: FolderIconId = 'star') => {
+    const c: Collection = { id: newId(), name, createdAt: Date.now(), recipeIds: [...new Set(recipeIds)], icon }
     await collectionStore.put(c)
     await refresh()
     return c
@@ -504,8 +505,8 @@ export default function App() {
               return n === collectFor.length ? true : n > 0 ? 'some' : false
             }}
             onToggle={(id, on) => toggleInCollection(id, collectFor, on)}
-            onCreate={async (name) => {
-              await createCollection(name, collectFor)
+            onCreate={async (name, icon) => {
+              await createCollection(name, collectFor, icon)
               if (!collectFor.length) go('#/')
             }}
             onClose={() => { setCollectFor(null); setSelecting(false); setPicked([]) }}
@@ -517,7 +518,7 @@ export default function App() {
         {manageCol && (
           <ManageCollection
             collection={collections.find((c) => c.id === manageCol.id) || manageCol}
-            onRename={async (name) => { await collectionStore.put({ ...manageCol, name }); await refresh() }}
+            onSave={async (name, icon) => { await collectionStore.put({ ...manageCol, name, icon }); await refresh() }}
             onDelete={async () => {
               await collectionStore.remove(manageCol.id)
               setManageCol(null)
@@ -643,7 +644,10 @@ function Home(p: {
         </nav>
         <header className="folder-head">
           <div>
-            <h1 className="folder-head__title">{folderTitle}</h1>
+            <h1 className="folder-head__title">
+              <FolderGlyph id={p.folder === 'all' ? 'all' : p.folder === 'unsorted' ? 'unsorted' : folderIconOf(currentCol)} size={28} />
+              {folderTitle}
+            </h1>
             <p className="count">{active.length ? `${active.length} card${active.length === 1 ? '' : 's'}` : 'No cards yet'}</p>
           </div>
           <span className="box__tools">
@@ -772,13 +776,13 @@ function Home(p: {
 
         {hasFolders ? (
           <ul className="folders">
-            <li><FolderCard name="All" count={p.recipes.length} recipes={p.recipes} tone="olive" onClick={() => p.onOpenFolder('all')} /></li>
-            <li><FolderCard name="Unsorted" count={unsorted.length} recipes={unsorted} tone="sage" onClick={() => p.onOpenFolder('unsorted')} /></li>
+            <li><FolderCard name="All" count={p.recipes.length} recipes={p.recipes} tone="olive" icon="all" onClick={() => p.onOpenFolder('all')} /></li>
+            <li><FolderCard name="Unsorted" count={unsorted.length} recipes={unsorted} tone="sage" icon="unsorted" onClick={() => p.onOpenFolder('unsorted')} /></li>
             {p.collections.map((c, i) => {
               const recs = inFolder(c.id)
               return (
                 <li key={c.id}>
-                  <FolderCard name={c.name} count={recs.length} recipes={recs} tone={folderTone(i)} onClick={() => p.onOpenFolder(c.id)} />
+                  <FolderCard name={c.name} count={recs.length} recipes={recs} tone={folderTone(i)} icon={folderIconOf(c)} onClick={() => p.onOpenFolder(c.id)} />
                 </li>
               )
             })}

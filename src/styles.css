@@ -811,7 +811,9 @@ textarea { font: inherit; }
   border-radius: 0 8px 6px 8px;
   box-shadow: var(--shadow);
 }
-.folder-card__peeks { display: flex; align-items: flex-end; min-height: 52px; padding-left: 4px; }
+.folder-card__row { display: flex; align-items: flex-end; gap: 8px; min-height: 52px; }
+.folder-card__glyph { display: inline-flex; color: var(--ink); flex: none; padding-bottom: 2px; }
+.folder-card__peeks { display: flex; align-items: flex-end; min-height: 52px; padding-left: 2px; flex: 1; min-width: 0; }
 .peek {
   width: 38px; height: 48px;
   margin-left: -10px;
@@ -850,10 +852,13 @@ textarea { font: inherit; }
 }
 .folder-head__title {
   margin: 0 0 4px;
+  display: flex; align-items: center; gap: 10px;
   font-family: var(--display);
   font-variation-settings: 'SOFT' 100, 'opsz' 72;
   font-weight: 620; font-size: 34px; line-height: 1.05;
 }
+.folder-head__title svg { flex: none; color: var(--olive); }
+
 .home--folder .topbar { margin-bottom: 8px; }
 .pick-dot {
   position: absolute; left: 10px; top: 10px; z-index: 2;
@@ -968,3 +973,27 @@ textarea { font: inherit; }
 .collect__n { position: absolute; right: 8px; font-family: var(--type); font-size: 12px; color: var(--ink-3); }
 .collect__list li { position: relative; }
 .collect__new { margin-top: 4px; }
+
+/* ───────────────────────── Folder icon picker ───────────────────────── */
+.icon-picker { border: 0; margin: 14px 0 8px; padding: 0; }
+.icon-picker legend {
+  font-family: var(--type); font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2);
+  margin-bottom: 8px; padding: 0;
+}
+.icon-picker__grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.icon-pick {
+  display: grid; place-items: center;
+  aspect-ratio: 1;
+  min-height: 44px;
+  color: var(--ink);
+  background: var(--card);
+  box-shadow: inset 0 0 0 1.25px color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 10px;
+}
+.icon-pick.is-on {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--olive) 20%, var(--card));
+  box-shadow: inset 0 0 0 1.75px var(--olive);
+}
+.collect__mark { display: inline-flex; color: var(--olive); margin-right: 2px; flex: none; }
+.collect__list .check { display: flex; align-items: center; gap: 6px; }
