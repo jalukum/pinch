@@ -14,14 +14,15 @@ import { hostLabel } from './lib/text'
 import { RecipeView } from './components/RecipeView'
 import { ShoppingList } from './components/ShoppingList'
 import { CollectSheet, ManageCollection } from './components/CollectSheet'
+import { FolderCard, folderTone } from './components/FolderCard'
 import { Sheet } from './components/Sheet'
 import { Editor, PasteText } from './components/Editor'
 import { ThemeToggle } from './components/ThemeToggle'
 import { Backdrop } from './components/Backdrop'
 import { Divider, EmptyArt, Stamp, SvgDefs, Tape } from './components/Ornaments'
-import { IconBasket, IconBox, IconClip, IconClock, IconFilm, IconFolder, IconNote, IconPencil, IconPlus, IconWhisk } from './components/Icons'
+import { IconBack, IconBasket, IconBox, IconClip, IconClock, IconFilm, IconFolder, IconNote, IconPencil, IconWhisk } from './components/Icons'
 
-type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' } | { name: 'shop' }
+type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' } | { name: 'shop' } | { name: 'folder'; id: string }
 
 function readRoute(): Route {
   const h = location.hash
@@ -29,6 +30,8 @@ function readRoute(): Route {
   if (m) return { name: 'recipe', id: m[1] }
   if (h.startsWith('#/new')) return { name: 'draft' }
   if (h.startsWith('#/shop')) return { name: 'shop' }
+  const f = /^#\/f\/([\w-]+)/.exec(h)
+  if (f) return { name: 'folder', id: f[1] }
   return { name: 'home' }
 }
 
@@ -56,7 +59,6 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [collections, setCollections] = useState<Collection[]>([])
   const [shop, setShop] = useState<ShopState>(loadShop)
-  const [filter, setFilter] = useState<'all' | 'unsorted' | string>('all')
   const [selecting, setSelecting] = useState(false)
   const [picked, setPicked] = useState<string[]>([])
   const [collectFor, setCollectFor] = useState<string[] | null>(null)
@@ -101,6 +103,11 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => { saveShop(shop) }, [shop])
+
+  useEffect(() => {
+    if (route.name === 'folder' && loaded && !collections.length) go('#/')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, loaded, collections.length])
 
   const go = (hash: string) => {
     if (location.hash !== hash) location.hash = hash
@@ -413,8 +420,7 @@ export default function App() {
       <Home
         recipes={recipes}
         collections={collections}
-        filter={filter}
-        setFilter={setFilter}
+        folder={route.name === 'folder' ? route.id : null}
         selecting={selecting}
         setSelecting={setSelecting}
         picked={picked}
@@ -449,6 +455,8 @@ export default function App() {
         }}
         onManage={(c) => setManageCol(c)}
         onNewFolder={() => setCollectFor([])}
+        onOpenFolder={(id) => { setSelecting(false); setPicked([]); go(`#/f/${id}`) }}
+        onBackToBox={() => { setSelecting(false); setPicked([]); go('#/') }}
       />
     )
   }
@@ -497,8 +505,8 @@ export default function App() {
             }}
             onToggle={(id, on) => toggleInCollection(id, collectFor, on)}
             onCreate={async (name) => {
-              const c = await createCollection(name, collectFor)
-              if (!collectFor.length) setFilter(c.id)
+              await createCollection(name, collectFor)
+              if (!collectFor.length) go('#/')
             }}
             onClose={() => { setCollectFor(null); setSelecting(false); setPicked([]) }}
           />
@@ -512,9 +520,9 @@ export default function App() {
             onRename={async (name) => { await collectionStore.put({ ...manageCol, name }); await refresh() }}
             onDelete={async () => {
               await collectionStore.remove(manageCol.id)
-              if (filter === manageCol.id) setFilter('all')
               setManageCol(null)
               await refresh()
+              go('#/')
               toast('Folder removed')
             }}
             onClose={() => setManageCol(null)}
@@ -547,8 +555,7 @@ export default function App() {
 function Home(p: {
   recipes: Recipe[]
   collections: Collection[]
-  filter: 'all' | 'unsorted' | string
-  setFilter: (s: 'all' | 'unsorted' | string) => void
+  folder: string | null
   selecting: boolean
   setSelecting: (v: boolean) => void
   picked: string[]
@@ -573,14 +580,103 @@ function Home(p: {
   onShopPicked: (ids: string[]) => void
   onManage: (c: Collection) => void
   onNewFolder: () => void
+  onOpenFolder: (id: string) => void
+  onBackToBox: () => void
 }) {
   const loading = p.status.s === 'loading'
   const failed = p.status.s === 'error' || p.status.s === 'video-error'
+  const hasFolders = p.collections.length > 0
   const filed = new Set(p.collections.flatMap((c) => c.recipeIds))
   const unsorted = p.recipes.filter((r) => !filed.has(r.id))
-  const active = p.filter === 'all' ? p.recipes : p.filter === 'unsorted' ? unsorted : p.recipes.filter((r) => (p.collections.find((c) => c.id === p.filter)?.recipeIds || []).includes(r.id))
-  const currentCol = p.collections.find((c) => c.id === p.filter)
+  const inFolder = (id: string) => {
+    if (id === 'all') return p.recipes
+    if (id === 'unsorted') return unsorted
+    const ids = p.collections.find((c) => c.id === id)?.recipeIds || []
+    return p.recipes.filter((r) => ids.includes(r.id))
+  }
+  const currentCol = p.folder && p.folder !== 'all' && p.folder !== 'unsorted' ? p.collections.find((c) => c.id === p.folder) : undefined
+  const folderTitle = p.folder === 'all' ? 'All' : p.folder === 'unsorted' ? 'Unsorted' : currentCol?.name || 'Folder'
+  const active = p.folder ? inFolder(p.folder) : p.recipes
   const togglePick = (id: string) => p.setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]))
+  const recipeCards = (list: Recipe[]) => (
+    <ul className="cards">
+      {list.map((r, i) => {
+        const on = p.picked.includes(r.id)
+        return (
+          <li key={r.id} style={{ ['--tilt' as any]: `${[-1.1, 0.7, -0.4, 1, -0.8][i % 5]}deg` }}>
+            <button
+              className={`index-card ${on ? 'is-picked' : ''}`}
+              onClick={() => p.selecting ? togglePick(r.id) : p.onOpen(r.id)}
+              aria-pressed={p.selecting ? on : undefined}
+            >
+              {p.selecting && <span className={`pick-dot ${on ? 'is-on' : ''}`} aria-hidden />}
+              <span className="index-card__photo">
+                <Tape className="tape--corner" tone={(['mustard', 'sage', 'rose'] as const)[i % 3]} />
+                {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" loading="lazy" decoding="async" /> : <IconWhisk size={34} />}
+              </span>
+              <span className="index-card__body">
+                <span className="index-card__title">{r.title}</span>
+                <span className="index-card__meta">
+                  {r.totalTime ? (
+                    <><IconClock size={15} /> {formatMinutes(r.totalTime)}</>
+                  ) : null}
+                  <span className="index-card__site">{r.siteName || hostLabel(r.url)}</span>
+                </span>
+              </span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
+  if (p.folder) {
+    return (
+      <div className={`home home--folder ${p.selecting ? 'is-selecting' : ''}`}>
+        <nav className="topbar">
+          <button className="link-btn" onClick={p.onBackToBox}>
+            <IconBack size={20} /> <span>The box</span>
+          </button>
+          <div className="topbar__actions">
+            {currentCol && <button className="icon-btn" onClick={() => p.onManage(currentCol)} aria-label="Rename or remove folder"><IconFolder /></button>}
+          </div>
+        </nav>
+        <header className="folder-head">
+          <div>
+            <h1 className="folder-head__title">{folderTitle}</h1>
+            <p className="count">{active.length ? `${active.length} card${active.length === 1 ? '' : 's'}` : 'No cards yet'}</p>
+          </div>
+          <span className="box__tools">
+            {currentCol && !p.selecting && (
+              <button className="link-btn box__select" onClick={() => p.onManage(currentCol)}>Rename or remove</button>
+            )}
+            {active.length > 0 && !p.selecting && (
+              <button className="link-btn box__select" onClick={() => p.setSelecting(true)}>Select</button>
+            )}
+            {p.selecting && (
+              <button className="link-btn box__select" onClick={() => { p.setSelecting(false); p.setPicked([]) }}>Cancel</button>
+            )}
+          </span>
+        </header>
+        {active.length === 0 ? (
+          <p className="hand folder-empty">{p.folder === 'unsorted' ? 'Everything is filed in a folder.' : 'Nothing in this folder yet. Open All, tap Select, and file some cards under here.'}</p>
+        ) : recipeCards(active)}
+        {p.selecting && (
+          <div className="select-bar" role="toolbar" aria-label="Selected cards">
+            <span className="select-bar__n">{p.picked.length ? `${p.picked.length} selected` : 'Pick some cards'}</span>
+            <button className="btn btn--quiet" disabled={!p.picked.length} onClick={() => p.onCollect(p.picked)}><IconFolder size={16} /> File under</button>
+            <button className="btn" disabled={!p.picked.length} onClick={() => p.onShopPicked(p.picked)}><IconBasket size={16} /> Shop these</button>
+          </div>
+        )}
+        <footer className="home__foot">
+          <Divider />
+          {p.shopCount > 0 && <button className="link-btn" onClick={p.onShop}><IconBasket size={16} /> Shopping list</button>}
+          <button className="link-btn" onClick={p.onSettings}>Backup &amp; settings</button>
+        </footer>
+      </div>
+    )
+  }
+
   return (
     <div className={`home ${p.selecting ? 'is-selecting' : ''}`}>
       <header className="masthead">
@@ -654,95 +750,46 @@ function Home(p: {
             <IconBox size={22} /> The box
           </h2>
           <span className="box__tools">
-            {p.recipes.length > 0 && !p.selecting && (
+            {!hasFolders && p.recipes.length > 0 && (
+              <button className="link-btn box__select" onClick={p.onNewFolder}>New folder</button>
+            )}
+            {!hasFolders && p.recipes.length > 0 && !p.selecting && (
               <button className="link-btn box__select" onClick={() => p.setSelecting(true)}>Select</button>
             )}
-            {p.selecting && (
+            {!hasFolders && p.selecting && (
               <button className="link-btn box__select" onClick={() => { p.setSelecting(false); p.setPicked([]) }}>Cancel</button>
             )}
-            <span className="count">{active.length ? `${active.length} card${active.length === 1 ? '' : 's'}` : ''}</span>
+            {!hasFolders && <span className="count">{p.recipes.length ? `${p.recipes.length} card${p.recipes.length === 1 ? '' : 's'}` : ''}</span>}
           </span>
         </div>
 
-        {p.recipes.length > 0 && (
-          <div className="chips" role="tablist" aria-label="Folders">
-            <button type="button" className={`chip ${p.filter === 'all' ? 'is-on' : ''}`} onClick={() => p.setFilter('all')} aria-selected={p.filter === 'all'}>
-              All <span className="chip__n">{p.recipes.length}</span>
-            </button>
-            {(p.collections.length > 0 && unsorted.length > 0) && (
-              <button type="button" className={`chip ${p.filter === 'unsorted' ? 'is-on' : ''}`} onClick={() => p.setFilter('unsorted')} aria-selected={p.filter === 'unsorted'}>
-                Unsorted <span className="chip__n">{unsorted.length}</span>
-              </button>
-            )}
-            {p.collections.map((c) => {
-              const n = c.recipeIds.filter((id) => p.recipes.some((r) => r.id === id)).length
-              return (
-                <button
-                  type="button"
-                  key={c.id}
-                  className={`chip ${p.filter === c.id ? 'is-on' : ''}`}
-                  onClick={() => p.setFilter(c.id)}
-                  onContextMenu={(e) => { e.preventDefault(); p.onManage(c) }}
-                  aria-selected={p.filter === c.id}
-                >
-                  {c.name} <span className="chip__n">{n}</span>
-                </button>
-              )
-            })}
-            <button type="button" className="chip chip--new" onClick={p.onNewFolder} aria-label="New folder"><IconPlus size={14} /> New</button>
-          </div>
-        )}
-
-        {currentCol && !p.selecting && (
-          <p className="folder-line">
-            <IconFolder size={16} /> {currentCol.name}
-            <button className="inline-link" onClick={() => p.onManage(currentCol)}>Rename or remove</button>
-          </p>
-        )}
-
-        {p.loaded && p.recipes.length === 0 && p.status.s !== 'loading' && (
+        {p.loaded && p.recipes.length === 0 && p.status.s !== 'loading' && !hasFolders && (
           <div className="empty">
             <EmptyArt />
             <p className="hand">Nothing filed yet — paste a link from any recipe site or cooking video and I’ll write you a proper card.</p>
           </div>
         )}
 
-        {p.loaded && p.recipes.length > 0 && active.length === 0 && (
-          <p className="hand folder-empty">Nothing in this folder yet. Select cards from All and file them under here.</p>
+        {hasFolders ? (
+          <ul className="folders">
+            <li><FolderCard name="All" count={p.recipes.length} recipes={p.recipes} tone="olive" onClick={() => p.onOpenFolder('all')} /></li>
+            <li><FolderCard name="Unsorted" count={unsorted.length} recipes={unsorted} tone="sage" onClick={() => p.onOpenFolder('unsorted')} /></li>
+            {p.collections.map((c, i) => {
+              const recs = inFolder(c.id)
+              return (
+                <li key={c.id}>
+                  <FolderCard name={c.name} count={recs.length} recipes={recs} tone={folderTone(i)} onClick={() => p.onOpenFolder(c.id)} />
+                </li>
+              )
+            })}
+            <li><FolderCard name="New folder" count={0} recipes={[]} fresh onClick={p.onNewFolder} /></li>
+          </ul>
+        ) : (
+          recipeCards(p.recipes)
         )}
-
-        <ul className="cards">
-          {active.map((r, i) => {
-            const on = p.picked.includes(r.id)
-            return (
-              <li key={r.id} style={{ ['--tilt' as any]: `${[-1.1, 0.7, -0.4, 1, -0.8][i % 5]}deg` }}>
-                <button
-                  className={`index-card ${on ? 'is-picked' : ''}`}
-                  onClick={() => p.selecting ? togglePick(r.id) : p.onOpen(r.id)}
-                  aria-pressed={p.selecting ? on : undefined}
-                >
-                  {p.selecting && <span className={`pick-dot ${on ? 'is-on' : ''}`} aria-hidden />}
-                  <span className="index-card__photo">
-                    <Tape className="tape--corner" tone={(['mustard', 'sage', 'rose'] as const)[i % 3]} />
-                    {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" loading="lazy" decoding="async" /> : <IconWhisk size={34} />}
-                  </span>
-                  <span className="index-card__body">
-                    <span className="index-card__title">{r.title}</span>
-                    <span className="index-card__meta">
-                      {r.totalTime ? (
-                        <><IconClock size={15} /> {formatMinutes(r.totalTime)}</>
-                      ) : null}
-                      <span className="index-card__site">{r.siteName || hostLabel(r.url)}</span>
-                    </span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
       </section>
 
-      {p.selecting && (
+      {!hasFolders && p.selecting && (
         <div className="select-bar" role="toolbar" aria-label="Selected cards">
           <span className="select-bar__n">{p.picked.length ? `${p.picked.length} selected` : 'Pick some cards'}</span>
           <button className="btn btn--quiet" disabled={!p.picked.length} onClick={() => p.onCollect(p.picked)}><IconFolder size={16} /> File under</button>
