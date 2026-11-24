@@ -1,30 +1,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Recipe } from './lib/types'
+import type { Collection, ShopState } from './lib/storage'
 import { extractRecipe, normalizeUrl, ExtractError, CUSTOM_PROXY_KEY, type Attempt } from './lib/fetcher'
 import { fromText } from './lib/parse'
 import { blankRecipe } from './lib/edit'
 import { FUSSY, fussyFor } from './lib/fussy'
 import { relayBase } from './lib/config'
 import { videoPlatform, recipeFromVideoLink, recipeFromVideoFile, VideoError, PLATFORM_NAME, type VideoStage, type VideoErrorKind, type VideoPlatform } from './lib/video'
-import { store, newId, requestPersistence, validateBackup, type Backup } from './lib/storage'
+import { store, collectionStore, collectionsFromBackup, loadShop, saveShop, newId, requestPersistence, validateBackup, type Backup } from './lib/storage'
 import { cacheImage } from './lib/image'
 import { formatMinutes } from './lib/duration'
 import { hostLabel } from './lib/text'
 import { RecipeView } from './components/RecipeView'
+import { ShoppingList } from './components/ShoppingList'
+import { CollectSheet, ManageCollection } from './components/CollectSheet'
 import { Sheet } from './components/Sheet'
 import { Editor, PasteText } from './components/Editor'
 import { ThemeToggle } from './components/ThemeToggle'
 import { Backdrop } from './components/Backdrop'
 import { Divider, EmptyArt, Stamp, SvgDefs, Tape } from './components/Ornaments'
-import { IconBox, IconClip, IconClock, IconFilm, IconNote, IconPencil, IconWhisk } from './components/Icons'
+import { IconBasket, IconBox, IconClip, IconClock, IconFilm, IconFolder, IconNote, IconPencil, IconPlus, IconWhisk } from './components/Icons'
 
-type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' }
+type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' } | { name: 'shop' }
 
 function readRoute(): Route {
   const h = location.hash
   const m = /^#\/r\/([\w-]+)/.exec(h)
   if (m) return { name: 'recipe', id: m[1] }
   if (h.startsWith('#/new')) return { name: 'draft' }
+  if (h.startsWith('#/shop')) return { name: 'shop' }
   return { name: 'home' }
 }
 
@@ -50,6 +54,13 @@ const LOADING_LINES = ['Fetching the page…', 'Knocking on the kitchen door…'
 export default function App() {
   const [route, setRoute] = useState<Route>(readRoute)
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [collections, setCollections] = useState<Collection[]>([])
+  const [shop, setShop] = useState<ShopState>(loadShop)
+  const [filter, setFilter] = useState<'all' | 'unsorted' | string>('all')
+  const [selecting, setSelecting] = useState(false)
+  const [picked, setPicked] = useState<string[]>([])
+  const [collectFor, setCollectFor] = useState<string[] | null>(null)
+  const [manageCol, setManageCol] = useState<Collection | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [draft, setDraft] = useState<Recipe | null>(null)
   const [justSaved, setJustSaved] = useState<string | null>(null)
@@ -75,6 +86,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     try {
       setRecipes(await store.all())
+      setCollections(await collectionStore.all())
     } catch {
       toast('Storage is unavailable in this browser mode')
     }
@@ -87,6 +99,8 @@ export default function App() {
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [refresh])
+
+  useEffect(() => { saveShop(shop) }, [shop])
 
   const go = (hash: string) => {
     if (location.hash !== hash) location.hash = hash
@@ -270,14 +284,55 @@ export default function App() {
     } catch {
       /* ignore */
     }
+    for (const c of collections) {
+      if (c.recipeIds.includes(r.id)) await collectionStore.put({ ...c, recipeIds: c.recipeIds.filter((id) => id !== r.id) })
+    }
+    setShop((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== r.id) }))
     setConfirm(null)
     await refresh()
     go('#/')
     toast('Card removed from the box')
   }
 
+  const addToShop = (items: { id: string; servings: number }[]) => {
+    setShop((s) => {
+      const entries = [...s.entries]
+      let added = 0
+      for (const it of items) {
+        const i = entries.findIndex((e) => e.id === it.id)
+        if (i >= 0) entries[i] = it
+        else { entries.push(it); added++ }
+      }
+      return { ...s, entries }
+    })
+    const n = items.length
+    const already = items.length === 1 && shop.entries.some((e) => e.id === items[0].id)
+    toast(already ? 'Updated the scale on the shopping list' : n === 1 ? 'Added to the shopping list' : `Added ${n} recipes to the shopping list`)
+  }
+
+  const defaultServings = (r: Recipe) => (r.servings && r.servings > 0 ? r.servings : 1)
+
+  const createCollection = async (name: string, recipeIds: string[] = []) => {
+    const c: Collection = { id: newId(), name, createdAt: Date.now(), recipeIds: [...new Set(recipeIds)] }
+    await collectionStore.put(c)
+    await refresh()
+    return c
+  }
+
+  const toggleInCollection = async (colId: string, recipeIds: string[], on: boolean) => {
+    const c = collections.find((x) => x.id === colId)
+    if (!c) return
+    const set = new Set(c.recipeIds)
+    for (const id of recipeIds) {
+      if (on) set.add(id)
+      else set.delete(id)
+    }
+    await collectionStore.put({ ...c, recipeIds: [...set] })
+    await refresh()
+  }
+
   const exportBackup = () => {
-    const data: Backup = { app: 'pinch', version: 1, exportedAt: new Date().toISOString(), recipes }
+    const data: Backup = { app: 'pinch', version: 2, exportedAt: new Date().toISOString(), recipes, collections }
     const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -290,10 +345,18 @@ export default function App() {
 
   const importBackup = async (file: File) => {
     try {
-      const list = validateBackup(JSON.parse(await file.text()))
+      const data = JSON.parse(await file.text())
+      const list = validateBackup(data)
       for (const r of list) await store.put(r)
+      const incoming = collectionsFromBackup(data)
+      const have = await collectionStore.all()
+      for (const c of incoming) {
+        const old = have.find((x) => x.id === c.id)
+        await collectionStore.put(old ? { ...c, recipeIds: [...new Set([...old.recipeIds, ...c.recipeIds])] } : c)
+      }
       await refresh()
-      toast(`Filed ${list.length} card${list.length === 1 ? '' : 's'} from backup`)
+      const extra = incoming.length ? ` and ${incoming.length} folder${incoming.length === 1 ? '' : 's'}` : ''
+      toast(`Filed ${list.length} card${list.length === 1 ? '' : 's'}${extra} from backup`)
       setSettings(false)
     } catch (e: any) {
       toast(e?.message || 'Couldn’t read that file')
@@ -306,6 +369,25 @@ export default function App() {
 
   if (editing) {
     page = <Editor key={editing.recipe.id} recipe={editing.recipe} isNew={editing.isNew} onCancel={() => setEditing(null)} onDone={finishEdit} />
+  } else if (route.name === 'shop') {
+    page = (
+      <ShoppingList
+        recipes={recipes}
+        entries={shop.entries}
+        checks={shop.checks}
+        onServings={(id, servings) => setShop((s) => ({ ...s, entries: s.entries.map((e) => (e.id === id ? { ...e, servings } : e)) }))}
+        onRemove={(id) => setShop((s) => ({ ...s, entries: s.entries.filter((e) => e.id !== id) }))}
+        onToggle={(key) => setShop((s) => {
+          const checks = { ...s.checks }
+          if (checks[key]) delete checks[key]
+          else checks[key] = true
+          return { ...s, checks }
+        })}
+        onClear={() => setShop((s) => ({ ...s, checks: {} }))}
+        onBack={() => go('#/')}
+        toast={toast}
+      />
+    )
   } else if ((route.name === 'recipe' || route.name === 'draft') && current) {
     page = (
       <RecipeView
@@ -319,12 +401,25 @@ export default function App() {
         onEdit={() => setEditing({ recipe: current, isNew: false })}
         partial={route.name === 'draft' && draftPartial}
         toast={toast}
+        onCollect={() => setCollectFor([current.id])}
+        onAddToShop={(servings) => addToShop([{ id: current.id, servings }])}
+        inShop={shop.entries.some((e) => e.id === current.id)}
+        shopCount={shop.entries.length}
+        onOpenShop={() => go('#/shop')}
       />
     )
   } else {
     page = (
       <Home
         recipes={recipes}
+        collections={collections}
+        filter={filter}
+        setFilter={setFilter}
+        selecting={selecting}
+        setSelecting={setSelecting}
+        picked={picked}
+        setPicked={setPicked}
+        shopCount={shop.entries.length}
         loaded={loaded}
         input={input}
         setInput={setInput}
@@ -342,6 +437,18 @@ export default function App() {
         onWrite={writeByHand}
         onFussy={() => setFussyOpen(true)}
         onUpload={pickVideo}
+        onShop={() => go('#/shop')}
+        onCollect={(ids) => setCollectFor(ids)}
+        onShopPicked={(ids) => {
+          addToShop(ids.map((id) => {
+            const r = recipes.find((x) => x.id === id)
+            return { id, servings: r ? defaultServings(r) : 1 }
+          }))
+          setSelecting(false)
+          setPicked([])
+        }}
+        onManage={(c) => setManageCol(c)}
+        onNewFolder={() => setCollectFor([])}
       />
     )
   }
@@ -377,6 +484,44 @@ export default function App() {
         <Settings recipes={recipes} onExport={exportBackup} onImport={importBackup} onClose={() => setSettings(false)} onFussy={() => { setSettings(false); setFussyOpen(true) }} />
       </Sheet>
 
+      <Sheet open={collectFor !== null} onClose={() => setCollectFor(null)} label="File under">
+        {collectFor && (
+          <CollectSheet
+            collections={collections}
+            selected={collectFor}
+            inIds={(id) => {
+              const c = collections.find((x) => x.id === id)
+              if (!c || !collectFor.length) return false
+              const n = collectFor.filter((r) => c.recipeIds.includes(r)).length
+              return n === collectFor.length ? true : n > 0 ? 'some' : false
+            }}
+            onToggle={(id, on) => toggleInCollection(id, collectFor, on)}
+            onCreate={async (name) => {
+              const c = await createCollection(name, collectFor)
+              if (!collectFor.length) setFilter(c.id)
+            }}
+            onClose={() => { setCollectFor(null); setSelecting(false); setPicked([]) }}
+          />
+        )}
+      </Sheet>
+
+      <Sheet open={!!manageCol} onClose={() => setManageCol(null)} label="Folder">
+        {manageCol && (
+          <ManageCollection
+            collection={collections.find((c) => c.id === manageCol.id) || manageCol}
+            onRename={async (name) => { await collectionStore.put({ ...manageCol, name }); await refresh() }}
+            onDelete={async () => {
+              await collectionStore.remove(manageCol.id)
+              if (filter === manageCol.id) setFilter('all')
+              setManageCol(null)
+              await refresh()
+              toast('Folder removed')
+            }}
+            onClose={() => setManageCol(null)}
+          />
+        )}
+      </Sheet>
+
       <input
         ref={videoInput}
         type="file"
@@ -401,6 +546,14 @@ export default function App() {
 
 function Home(p: {
   recipes: Recipe[]
+  collections: Collection[]
+  filter: 'all' | 'unsorted' | string
+  setFilter: (s: 'all' | 'unsorted' | string) => void
+  selecting: boolean
+  setSelecting: (v: boolean) => void
+  picked: string[]
+  setPicked: (ids: string[] | ((p: string[]) => string[])) => void
+  shopCount: number
   loaded: boolean
   input: string
   setInput: (s: string) => void
@@ -415,12 +568,27 @@ function Home(p: {
   onWrite: (url?: string) => void
   onFussy: () => void
   onUpload: () => void
+  onShop: () => void
+  onCollect: (ids: string[]) => void
+  onShopPicked: (ids: string[]) => void
+  onManage: (c: Collection) => void
+  onNewFolder: () => void
 }) {
   const loading = p.status.s === 'loading'
   const failed = p.status.s === 'error' || p.status.s === 'video-error'
+  const filed = new Set(p.collections.flatMap((c) => c.recipeIds))
+  const unsorted = p.recipes.filter((r) => !filed.has(r.id))
+  const active = p.filter === 'all' ? p.recipes : p.filter === 'unsorted' ? unsorted : p.recipes.filter((r) => (p.collections.find((c) => c.id === p.filter)?.recipeIds || []).includes(r.id))
+  const currentCol = p.collections.find((c) => c.id === p.filter)
+  const togglePick = (id: string) => p.setPicked((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : [...xs, id]))
   return (
-    <div className="home">
+    <div className={`home ${p.selecting ? 'is-selecting' : ''}`}>
       <header className="masthead">
+        <button className="shop-stamp" onClick={p.onShop} aria-label={p.shopCount ? `Shopping list, ${p.shopCount} recipe${p.shopCount === 1 ? '' : 's'}` : 'Shopping list'}>
+          <IconBasket size={22} />
+          {p.shopCount > 0 && <span className="shop-stamp__n">{p.shopCount}</span>}
+          <span>List</span>
+        </button>
         <ThemeToggle />
         <h1 className="wordmark">Pinch<span className="wordmark__dot">.</span></h1>
         <p className="masthead__sub">a little recipe box</p>
@@ -485,8 +653,52 @@ function Home(p: {
           <h2 id="box-h" className="section-title">
             <IconBox size={22} /> The box
           </h2>
-          <span className="count">{p.recipes.length ? `${p.recipes.length} card${p.recipes.length === 1 ? '' : 's'}` : ''}</span>
+          <span className="box__tools">
+            {p.recipes.length > 0 && !p.selecting && (
+              <button className="link-btn box__select" onClick={() => p.setSelecting(true)}>Select</button>
+            )}
+            {p.selecting && (
+              <button className="link-btn box__select" onClick={() => { p.setSelecting(false); p.setPicked([]) }}>Cancel</button>
+            )}
+            <span className="count">{active.length ? `${active.length} card${active.length === 1 ? '' : 's'}` : ''}</span>
+          </span>
         </div>
+
+        {p.recipes.length > 0 && (
+          <div className="chips" role="tablist" aria-label="Folders">
+            <button type="button" className={`chip ${p.filter === 'all' ? 'is-on' : ''}`} onClick={() => p.setFilter('all')} aria-selected={p.filter === 'all'}>
+              All <span className="chip__n">{p.recipes.length}</span>
+            </button>
+            {(p.collections.length > 0 && unsorted.length > 0) && (
+              <button type="button" className={`chip ${p.filter === 'unsorted' ? 'is-on' : ''}`} onClick={() => p.setFilter('unsorted')} aria-selected={p.filter === 'unsorted'}>
+                Unsorted <span className="chip__n">{unsorted.length}</span>
+              </button>
+            )}
+            {p.collections.map((c) => {
+              const n = c.recipeIds.filter((id) => p.recipes.some((r) => r.id === id)).length
+              return (
+                <button
+                  type="button"
+                  key={c.id}
+                  className={`chip ${p.filter === c.id ? 'is-on' : ''}`}
+                  onClick={() => p.setFilter(c.id)}
+                  onContextMenu={(e) => { e.preventDefault(); p.onManage(c) }}
+                  aria-selected={p.filter === c.id}
+                >
+                  {c.name} <span className="chip__n">{n}</span>
+                </button>
+              )
+            })}
+            <button type="button" className="chip chip--new" onClick={p.onNewFolder} aria-label="New folder"><IconPlus size={14} /> New</button>
+          </div>
+        )}
+
+        {currentCol && !p.selecting && (
+          <p className="folder-line">
+            <IconFolder size={16} /> {currentCol.name}
+            <button className="inline-link" onClick={() => p.onManage(currentCol)}>Rename or remove</button>
+          </p>
+        )}
 
         {p.loaded && p.recipes.length === 0 && p.status.s !== 'loading' && (
           <div className="empty">
@@ -495,31 +707,52 @@ function Home(p: {
           </div>
         )}
 
+        {p.loaded && p.recipes.length > 0 && active.length === 0 && (
+          <p className="hand folder-empty">Nothing in this folder yet. Select cards from All and file them under here.</p>
+        )}
+
         <ul className="cards">
-          {p.recipes.map((r, i) => (
-            <li key={r.id} style={{ ['--tilt' as any]: `${[-1.1, 0.7, -0.4, 1, -0.8][i % 5]}deg` }}>
-              <button className="index-card" onClick={() => p.onOpen(r.id)}>
-                <span className="index-card__photo">
-                  <Tape className="tape--corner" tone={(['mustard', 'sage', 'rose'] as const)[i % 3]} />
-                  {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" loading="lazy" decoding="async" /> : <IconWhisk size={34} />}
-                </span>
-                <span className="index-card__body">
-                  <span className="index-card__title">{r.title}</span>
-                  <span className="index-card__meta">
-                    {r.totalTime ? (
-                      <><IconClock size={15} /> {formatMinutes(r.totalTime)}</>
-                    ) : null}
-                    <span className="index-card__site">{r.siteName || hostLabel(r.url)}</span>
+          {active.map((r, i) => {
+            const on = p.picked.includes(r.id)
+            return (
+              <li key={r.id} style={{ ['--tilt' as any]: `${[-1.1, 0.7, -0.4, 1, -0.8][i % 5]}deg` }}>
+                <button
+                  className={`index-card ${on ? 'is-picked' : ''}`}
+                  onClick={() => p.selecting ? togglePick(r.id) : p.onOpen(r.id)}
+                  aria-pressed={p.selecting ? on : undefined}
+                >
+                  {p.selecting && <span className={`pick-dot ${on ? 'is-on' : ''}`} aria-hidden />}
+                  <span className="index-card__photo">
+                    <Tape className="tape--corner" tone={(['mustard', 'sage', 'rose'] as const)[i % 3]} />
+                    {r.imageData || r.image ? <img src={r.imageData || r.image} alt="" loading="lazy" decoding="async" /> : <IconWhisk size={34} />}
                   </span>
-                </span>
-              </button>
-            </li>
-          ))}
+                  <span className="index-card__body">
+                    <span className="index-card__title">{r.title}</span>
+                    <span className="index-card__meta">
+                      {r.totalTime ? (
+                        <><IconClock size={15} /> {formatMinutes(r.totalTime)}</>
+                      ) : null}
+                      <span className="index-card__site">{r.siteName || hostLabel(r.url)}</span>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </section>
 
+      {p.selecting && (
+        <div className="select-bar" role="toolbar" aria-label="Selected cards">
+          <span className="select-bar__n">{p.picked.length ? `${p.picked.length} selected` : 'Pick some cards'}</span>
+          <button className="btn btn--quiet" disabled={!p.picked.length} onClick={() => p.onCollect(p.picked)}><IconFolder size={16} /> File under</button>
+          <button className="btn" disabled={!p.picked.length} onClick={() => p.onShopPicked(p.picked)}><IconBasket size={16} /> Shop these</button>
+        </div>
+      )}
+
       <footer className="home__foot">
         {p.recipes.length > 0 && <Divider />}
+        {p.shopCount > 0 && <button className="link-btn" onClick={p.onShop}><IconBasket size={16} /> Shopping list</button>}
         <button className="link-btn" onClick={p.onSettings}>Backup &amp; settings</button>
       </footer>
     </div>

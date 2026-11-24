@@ -4,7 +4,7 @@ import { formatMinutes } from '../lib/duration'
 import { scaleIngredient, formatQty } from '../lib/scale'
 import { Divider, Stamp, Tape } from './Ornaments'
 import { relayImage } from '../lib/config'
-import { IconBack, IconPencil, IconLink, IconMinus, IconPlus, IconRefresh, IconShare, IconSun, IconTrash } from './Icons'
+import { IconBack, IconBasket, IconFolder, IconLink, IconMinus, IconPencil, IconPlus, IconRefresh, IconShare, IconSun, IconTrash } from './Icons'
 
 interface Props {
   recipe: Recipe
@@ -16,6 +16,11 @@ interface Props {
   onEdit: () => void
   partial?: boolean
   toast: (msg: string) => void
+  onCollect?: () => void
+  onAddToShop?: (servings: number) => void
+  inShop?: boolean
+  shopCount?: number
+  onOpenShop?: () => void
 }
 
 function useProgress(key: string) {
@@ -88,7 +93,7 @@ export function recipeAsText(r: Recipe, factor = 1): string {
   return lines.join('\n')
 }
 
-export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDelete, onEdit, partial, toast }: Props) {
+export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDelete, onEdit, partial, toast, onCollect, onAddToShop, inShop, shopCount, onOpenShop }: Props) {
   const [checks, setChecks] = useProgress(`pinch.progress.${r.id}`)
   const baseServings = r.servings && r.servings > 0 ? r.servings : undefined
   const [servings, setServings] = useState<number>(baseServings ?? 1)
@@ -156,6 +161,13 @@ export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDele
           <IconBack size={20} /> <span>The box</span>
         </button>
         <div className="topbar__actions">
+          {saved && onCollect && <button className="icon-btn" onClick={onCollect} aria-label="File in a folder"><IconFolder /></button>}
+          {saved && onAddToShop && (
+            <button className="icon-btn" onClick={() => onAddToShop(servings)} aria-label={inShop ? 'Update shopping list' : 'Add to shopping list'}>
+              <IconBasket />
+              {!!shopCount && <span className="icon-btn__badge">{shopCount}</span>}
+            </button>
+          )}
           <button className="icon-btn" onClick={onEdit} aria-label="Edit card"><IconPencil /></button>
           <button className="icon-btn" onClick={share} aria-label="Share recipe"><IconShare /></button>
           {saved && <button className="icon-btn" onClick={onDelete} aria-label="Remove from box"><IconTrash /></button>}
@@ -299,6 +311,14 @@ export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDele
           <button className="link-btn" onClick={() => setChecks({})}><IconRefresh size={18} /> Clear ticks</button>
         )}
         <button className="link-btn" onClick={copy}>Copy as text</button>
+        {saved && onAddToShop && (
+          <button className="link-btn" onClick={() => onAddToShop(servings)}>
+            <IconBasket size={16} /> {inShop ? 'Update the shopping list' : 'Add to the shopping list'}
+          </button>
+        )}
+        {saved && onOpenShop && !!shopCount && (
+          <button className="link-btn" onClick={onOpenShop}>Open the list</button>
+        )}
         <button className="link-btn" onClick={onEdit}><IconPencil size={16} /> Edit card</button>
         {r.url && <a className="link-btn" href={r.url} target="_blank" rel="noopener noreferrer">Original page <IconLink size={14} /></a>}
       </footer>
