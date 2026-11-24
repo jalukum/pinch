@@ -21,7 +21,7 @@ export function CollectSheet({
 }) {
   const [adding, setAdding] = useState(selected.length === 0)
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState<FolderIconId>('star')
+  const [icon, setIcon] = useState<FolderIconId>('bowl')
   const n = selected.length
   const filing = n > 0
   const create = () => {
@@ -29,7 +29,7 @@ export function CollectSheet({
     if (!t) return
     onCreate(t, icon)
     setName('')
-    setIcon('star')
+    setIcon('bowl')
     setAdding(false)
   }
   return (
@@ -52,7 +52,7 @@ export function CollectSheet({
                 <span className="check__box" aria-hidden>
                   <svg viewBox="0 0 24 24"><path d="M5 12.8c1.4 1.4 2.8 2.9 4.1 4.4 3.2-3.8 6.4-7.5 9.9-11" /></svg>
                 </span>
-                <span className="collect__mark" aria-hidden><FolderGlyph id={folderIconOf(c)} size={18} /></span>
+                <span className="collect__mark" aria-hidden><FolderGlyph id={folderIconOf(c)} size={22} /></span>
                 <span className="check__text">{c.name}</span>
                 <span className="collect__n">{c.recipeIds.length}</span>
               </label>
@@ -80,7 +80,7 @@ export function CollectSheet({
         </form>
       ) : (
         <div className="sheet__actions">
-          <button className="btn btn--quiet" onClick={() => { setAdding(true); setIcon('star') }}><IconPlus size={16} /> New folder</button>
+          <button className="btn btn--quiet" onClick={() => { setAdding(true); setIcon('bowl') }}><IconPlus size={16} /> New folder</button>
           <button className="btn" onClick={onClose}>Done</button>
         </div>
       )}

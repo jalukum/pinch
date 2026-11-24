@@ -32,6 +32,24 @@
   --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .15 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --fibers: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .09' numOctaves='2' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .3 0 0 0 0 .2 0 0 0 .35 -.05'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)'/%3E%3C/svg%3E");
   --noise-op: .18;
+  --food-cream: #f6efe0;
+  --food-foam: #fbf7f0;
+  --food-yolk: #e8b84a;
+  --food-crust: #d9a24a;
+  --food-shell: #e4b45a;
+  --food-lemon: #e6c25a;
+  --food-leaf: #8a9460;
+  --food-avocado: #8f9a62;
+  --food-pit: #c48a4a;
+  --food-berry: #c46a4a;
+  --food-sauce: #c46b48;
+  --food-pepperoni: #b85a3c;
+  --food-liner: #d9a090;
+  --food-mug: #c98972;
+  --food-coffee: #6b4e3a;
+  --food-chip: #5c3d2e;
+  --food-bread: #d7a86a;
+  --food-paper: #f3ead8;
   color-scheme: light;
 }
 
@@ -55,6 +73,24 @@
     --shadow: 0 1px 1px rgba(0, 0, 0, .3), 0 8px 18px -8px rgba(0, 0, 0, .6), 0 22px 34px -22px rgba(0, 0, 0, .55);
     --shadow-lift: 0 2px 2px rgba(0, 0, 0, .3), 0 16px 28px -12px rgba(0, 0, 0, .7);
     --noise-op: .28;
+    --food-cream: #efe4d0;
+    --food-foam: #f4eadc;
+    --food-yolk: #e2b356;
+    --food-crust: #e2b356;
+    --food-shell: #e4b45a;
+    --food-lemon: #e2b356;
+    --food-leaf: #9aa572;
+    --food-avocado: #9aa572;
+    --food-pit: #d4a05c;
+    --food-berry: #e08a62;
+    --food-sauce: #e08a62;
+    --food-pepperoni: #e08a62;
+    --food-liner: #c98a76;
+    --food-mug: #c98a76;
+    --food-coffee: #5a4232;
+    --food-chip: #3a2a20;
+    --food-bread: #e2b356;
+    --food-paper: #e8dcc8;
     color-scheme: dark;
   }
 }
@@ -804,40 +840,21 @@ textarea { font: inherit; }
 }
 .folder-card__body {
   display: flex; flex-direction: column; justify-content: space-between;
-  min-height: 122px; padding: 14px 10px 12px;
+  min-height: 140px; padding: 16px 10px 10px;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--ink) 5%, transparent), transparent 14px),
     var(--folder);
   border-radius: 0 8px 6px 8px;
   box-shadow: var(--shadow);
 }
-.folder-card__row { display: flex; align-items: flex-end; gap: 8px; min-height: 52px; }
-.folder-card__glyph { display: inline-flex; color: var(--ink); flex: none; padding-bottom: 2px; }
-.folder-card__peeks { display: flex; align-items: flex-end; min-height: 52px; padding-left: 2px; flex: 1; min-width: 0; }
-.peek {
-  width: 38px; height: 48px;
-  margin-left: -10px;
-  background: var(--card);
-  box-shadow: 0 1px 2px rgba(0,0,0,.16), 0 4px 8px -4px rgba(0,0,0,.2);
-  transform: rotate(calc((var(--i, 0) - 1) * 5deg));
-  display: grid; place-items: center;
-  overflow: hidden;
-  color: var(--ink-3);
-  position: relative;
-  z-index: calc(3 - var(--i, 0));
-}
-.peek:first-child { margin-left: 0; }
-.peek img { width: 100%; height: 100%; object-fit: cover; }
-.folder-card__empty {
-  font-family: var(--hand); font-size: 18px; color: color-mix(in srgb, var(--ink) 45%, transparent);
-  padding-left: 2px;
-}
+.folder-card__glyph { display: grid; place-items: center; flex: 1; color: var(--ink); padding: 2px 0 4px; }
+.folder-card__glyph svg { width: 64px; height: 64px; display: block; }
 .folder-card__n, .folder-card__name {
   font-family: var(--type); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2);
 }
 .folder-card--new { padding-top: 8px; }
 .folder-card--new .folder-card__body {
-  align-items: center; justify-content: center; gap: 8px; min-height: 138px;
+  align-items: center; justify-content: center; gap: 8px; min-height: 156px;
   background: transparent;
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 28%, transparent);
   border-radius: 8px;
@@ -984,12 +1001,13 @@ textarea { font: inherit; }
 .icon-pick {
   display: grid; place-items: center;
   aspect-ratio: 1;
-  min-height: 44px;
+  min-height: 58px;
   color: var(--ink);
   background: var(--card);
   box-shadow: inset 0 0 0 1.25px color-mix(in srgb, var(--ink) 20%, transparent);
-  border-radius: 10px;
+  border-radius: 12px;
 }
+.icon-pick svg { width: 32px; height: 32px; display: block; }
 .icon-pick.is-on {
   color: var(--ink);
   background: color-mix(in srgb, var(--olive) 20%, var(--card));

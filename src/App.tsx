@@ -320,7 +320,7 @@ export default function App() {
 
   const defaultServings = (r: Recipe) => (r.servings && r.servings > 0 ? r.servings : 1)
 
-  const createCollection = async (name: string, recipeIds: string[] = [], icon: FolderIconId = 'star') => {
+  const createCollection = async (name: string, recipeIds: string[] = [], icon: FolderIconId = 'bowl') => {
     const c: Collection = { id: newId(), name, createdAt: Date.now(), recipeIds: [...new Set(recipeIds)], icon }
     await collectionStore.put(c)
     await refresh()
@@ -645,7 +645,7 @@ function Home(p: {
         <header className="folder-head">
           <div>
             <h1 className="folder-head__title">
-              <FolderGlyph id={p.folder === 'all' ? 'all' : p.folder === 'unsorted' ? 'unsorted' : folderIconOf(currentCol)} size={28} />
+              <FolderGlyph id={p.folder === 'all' ? 'all' : p.folder === 'unsorted' ? 'unsorted' : folderIconOf(currentCol)} size={36} />
               {folderTitle}
             </h1>
             <p className="count">{active.length ? `${active.length} card${active.length === 1 ? '' : 's'}` : 'No cards yet'}</p>
@@ -776,17 +776,17 @@ function Home(p: {
 
         {hasFolders ? (
           <ul className="folders">
-            <li><FolderCard name="All" count={p.recipes.length} recipes={p.recipes} tone="olive" icon="all" onClick={() => p.onOpenFolder('all')} /></li>
-            <li><FolderCard name="Unsorted" count={unsorted.length} recipes={unsorted} tone="sage" icon="unsorted" onClick={() => p.onOpenFolder('unsorted')} /></li>
+            <li><FolderCard name="All" count={p.recipes.length} tone="olive" icon="all" onClick={() => p.onOpenFolder('all')} /></li>
+            <li><FolderCard name="Unsorted" count={unsorted.length} tone="sage" icon="unsorted" onClick={() => p.onOpenFolder('unsorted')} /></li>
             {p.collections.map((c, i) => {
               const recs = inFolder(c.id)
               return (
                 <li key={c.id}>
-                  <FolderCard name={c.name} count={recs.length} recipes={recs} tone={folderTone(i)} icon={folderIconOf(c)} onClick={() => p.onOpenFolder(c.id)} />
+                  <FolderCard name={c.name} count={recs.length} tone={folderTone(i)} icon={folderIconOf(c)} onClick={() => p.onOpenFolder(c.id)} />
                 </li>
               )
             })}
-            <li><FolderCard name="New folder" count={0} recipes={[]} fresh onClick={p.onNewFolder} /></li>
+            <li><FolderCard name="New folder" count={0} fresh onClick={p.onNewFolder} /></li>
           </ul>
         ) : (
           recipeCards(p.recipes)

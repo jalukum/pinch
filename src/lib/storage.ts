@@ -1,5 +1,5 @@
 import type { Recipe } from './types'
-import { isFolderIcon } from './folder-icons'
+import { folderIconOf } from './folder-icons'
 
 const DB = 'pinch'
 const DB_VER = 2
@@ -57,7 +57,13 @@ export const store = {
 export const collectionStore = {
   all: async (): Promise<Collection[]> => {
     const list = await tx<Collection[]>(COLLECTIONS, 'readonly', (s) => s.getAll())
-    return list.sort((a, b) => a.createdAt - b.createdAt)
+    const migrated = list.map((c) => {
+      const icon = folderIconOf(c)
+      return c.icon === icon ? c : { ...c, icon }
+    })
+    const dirty = migrated.filter((c, i) => c !== list[i])
+    if (dirty.length) void Promise.all(dirty.map((c) => tx(COLLECTIONS, 'readwrite', (s) => s.put(c))))
+    return migrated.sort((a, b) => a.createdAt - b.createdAt)
   },
   put: (c: Collection) => tx(COLLECTIONS, 'readwrite', (s) => s.put(c)),
   remove: (id: string) => tx(COLLECTIONS, 'readwrite', (s) => s.delete(id)),
@@ -101,7 +107,7 @@ export function collectionsFromBackup(data: any): Collection[] {
       name: String(c.name).trim() || 'Untitled',
       createdAt: typeof c.createdAt === 'number' ? c.createdAt : Date.now(),
       recipeIds: c.recipeIds.map(String).filter(Boolean),
-      icon: isFolderIcon(c.icon) ? c.icon : undefined,
+      icon: folderIconOf({ icon: typeof c.icon === 'string' ? c.icon : undefined, name: String(c.name) }),
     }))
 }
 
