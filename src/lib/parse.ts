@@ -887,13 +887,133 @@ export function quality(r?: ParsedRecipe): number {
 
 function mergeRecipes(a: ParsedRecipe, b: ParsedRecipe): ParsedRecipe {
   const n = (r: ParsedRecipe, k: 'ingredients' | 'instructions') => (r[k] as any[]).reduce((x, g) => x + (g.items ?? g.steps).length, 0)
+  const prefer = (ka: 'ingredients' | 'instructions') => {
+    const na = n(a, ka), nb = n(b, ka)
+    if (na !== nb) return na >= nb ? a[ka] : b[ka]
+    const titled = (r: ParsedRecipe) => (r[ka] as { title?: string }[]).filter((g) => g.title).length
+    return titled(a) >= titled(b) ? a[ka] : b[ka]
+  }
   return {
     ...b,
     ...Object.fromEntries(Object.entries(a).filter(([, v]) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))),
-    ingredients: n(a, 'ingredients') >= n(b, 'ingredients') ? a.ingredients : b.ingredients,
-    instructions: n(a, 'instructions') >= n(b, 'instructions') ? a.instructions : b.instructions,
+    ingredients: prefer('ingredients'),
+    instructions: prefer('instructions'),
     extractedVia: b.extractedVia,
   } as ParsedRecipe
+}
+
+// ─────────────── ingredient sections ───────────────
+
+const normIng = (t: string) => clean(t).toLowerCase().replace(/^▢\s*/, '').replace(/[^a-z0-9]+/g, ' ').trim()
+
+/** Lay a flat ingredient list over the page's own grouped list (WPRM, Tasty, Mediavine, headed lists). */
+export function regroupFromPage(flat: string[], groups: IngredientGroup[]): IngredientGroup[] | undefined {
+  const titled = groups.filter((g) => g.title)
+  if (groups.length < 2 || titled.length < groups.length - 1) return undefined
+  const where = new Map<string, number>()
+  groups.forEach((g, i) => g.items.forEach((it) => { const k = normIng(it); if (k && !where.has(k)) where.set(k, i) }))
+  const out: IngredientGroup[] = groups.map((g) => ({ title: g.title, items: [] }))
+  let miss = 0
+  let last = 0
+  for (const it of flat) {
+    const k = normIng(it)
+    let gi = where.get(k)
+    if (gi === undefined) for (const [kk, i] of where) if (kk.length > 6 && (kk.includes(k) || k.includes(kk))) { gi = i; break }
+    if (gi === undefined) { miss++; gi = last }
+    out[gi].items.push(it)
+    last = gi
+  }
+  if (miss > Math.max(1, flat.length * 0.2)) return undefined
+  const kept = out.filter((g) => g.items.length)
+  return kept.length > 1 ? kept : undefined
+}
+
+const UNITS = new Set('cup cups c tbsp tablespoon tablespoons tsp teaspoon teaspoons oz ounce ounces lb lbs pound pounds g gram grams kg ml l liter liters pinch dash can cans package packages pkg stick sticks large medium small whole clove cloves of a an and or to taste plus more for divided softened melted room temperature cold warm packed sifted chopped finely fresh ground'.split(' '))
+function keyWords(ing: string): string[] {
+  return normIng(ing.replace(/\([^)]*\)/g, ' ').split(',')[0]).split(' ')
+    .filter((w) => w.length > 2 && !/\d/.test(w) && !UNITS.has(w))
+    .map((w) => w.replace(/(ies)$/, 'y').replace(/(es|s)$/, ''))
+}
+
+/** When only the steps are sectioned, place each ingredient under the section whose steps mention it.
+ * Only used when the result is clean: every section a single unbroken run, in the steps' order. */
+export function regroupBySteps(flat: string[], sections: StepGroup[]): IngredientGroup[] | undefined {
+  if (sections.length < 2 || sections.some((s) => !s.title) || flat.length < 4) return undefined
+  const texts = sections.map((s) => normIng(s.steps.join(' ')).split(' ').map((w) => w.replace(/(ies)$/, 'y').replace(/(es|s)$/, '')))
+  const hits = flat.map((it) => {
+    const kw = keyWords(it)
+    const scores = texts.map((t) => kw.filter((w) => t.includes(w)).length)
+    const best = Math.max(...scores)
+    const winners = scores.map((s, i) => (s === best && best > 0 ? i : -1)).filter((i) => i >= 0)
+    return winners.length === 1 ? winners[0] : -1
+  })
+  const sure = hits.filter((h) => h >= 0).length
+  if (sure < flat.length * 0.6) return undefined
+  // unique hits must already follow the section order
+  const uniques = hits.filter((h) => h >= 0)
+  for (let i = 1; i < uniques.length; i++) if (uniques[i] < uniques[i - 1]) return undefined
+  // fill holes from the nearest unique hit; a gap between two sections stays with the earlier one
+  // (ingredient lists are almost always written in section order)
+  const assign = [...hits]
+  for (let i = 0; i < assign.length; i++) {
+    if (assign[i] >= 0) continue
+    let a = -1, b = -1
+    for (let j = i - 1; j >= 0; j--) if (hits[j] >= 0) { a = hits[j]; break }
+    for (let j = i + 1; j < hits.length; j++) if (hits[j] >= 0) { b = hits[j]; break }
+    assign[i] = a >= 0 ? a : b
+    if (assign[i] < 0) return undefined
+  }
+  for (let i = 1; i < assign.length; i++) if (assign[i] < assign[i - 1]) return undefined
+  const out = sections.map((s) => ({ title: s.title, items: [] as string[] }))
+  flat.forEach((it, i) => out[assign[i]].items.push(it))
+  const kept = out.filter((g) => g.items.length)
+  return kept.length > 1 ? kept : undefined
+}
+
+/** A heading slipped into a flat ingredient list ("For the frosting:", "Dough"). */
+export function isIngredientHeading(s: string): string | undefined {
+  const t = clean(s).replace(/^[-*•▢☐]\s*/, '')
+  if (/^for the\s+.+/i.test(t) && t.length < 60) return t.replace(/:$/, '').trim()
+  if (/:$/.test(t) && t.length < 40 && !looksLikeIngredient(t)) return t.replace(/:$/, '').trim()
+  return undefined
+}
+
+/** Split a single untitled list that already contains heading lines. */
+export function splitFlatHeadings(groups: IngredientGroup[]): IngredientGroup[] {
+  if (groups.length !== 1) return groups
+  const out: IngredientGroup[] = []
+  let cur: IngredientGroup = groups[0].title ? { title: groups[0].title, items: [] } : { items: [] }
+  let saw = false
+  for (const it of groups[0].items) {
+    const h = isIngredientHeading(it)
+    if (h) {
+      if (cur.items.length) out.push(cur)
+      cur = { title: h, items: [] }
+      saw = true
+      continue
+    }
+    cur.items.push(it)
+  }
+  if (cur.items.length) out.push(cur)
+  return saw && out.length > 1 ? out : groups
+}
+
+function pageGroups(doc: Document, url: string): IngredientGroup[] | undefined {
+  for (const fn of [fromPlugins, fromHeadings]) {
+    try {
+      const g = fn(doc, url)?.ingredients
+      if (g && g.filter((x) => x.title).length && g.length > 1) return g
+    } catch { /* ignore a bad parser */ }
+  }
+  return undefined
+}
+
+function sectionIngredients(doc: Document, url: string, r: ParsedRecipe) {
+  r.ingredients = splitFlatHeadings(r.ingredients)
+  if (r.ingredients.length !== 1 || r.ingredients[0].title) return
+  const flat = r.ingredients[0].items
+  const g = regroupFromPage(flat, pageGroups(doc, url) ?? []) || regroupBySteps(flat, r.instructions)
+  if (g) r.ingredients = g
 }
 
 /** Parse an HTML document string into a recipe. Returns undefined if nothing recipe-like is found. */
@@ -922,6 +1042,7 @@ export function parseRecipeHtml(html: string, url: string): ParsedRecipe | undef
   if (!best) return undefined
   best.ingredients = best.ingredients.map((g) => ({ ...g, items: g.items.map(tidyIngredient).filter(Boolean) }))
   best.instructions = best.instructions.map((g) => ({ ...g, steps: g.steps.flatMap(splitNumberedStep) }))
+  sectionIngredients(doc, url, best)
   // fill gaps from the page
   if (!best.image) best.image = absUrl(metaContent(doc, 'og:image', 'twitter:image'), url)
   if (!best.notes.length) best.notes = notesFromDom(doc)

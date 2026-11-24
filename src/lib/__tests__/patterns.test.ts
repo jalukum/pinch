@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseRecipeHtml, fromRdfa, fromPlugins, fromNextData, fromHeadings, fromText, pageBasics, alternateLinks, looksLikeIngredient } from '../parse'
+import { parseRecipeHtml, fromRdfa, fromPlugins, fromNextData, fromHeadings, fromText, pageBasics, alternateLinks, looksLikeIngredient, regroupFromPage, regroupBySteps, splitFlatHeadings } from '../parse'
 import { tidyIngredient } from '../text'
 import { groupsToText, textToIngredients, textToSteps, minutesFrom, toFields, fromFields, blankRecipe } from '../edit'
 import { fussyFor } from '../fussy'
@@ -189,5 +189,107 @@ describe('crammed numbered steps', () => {
     expect(splitNumberedStep('1. Preheat the oven. 2. Melt the butter. 3. Add the garlic.')).toEqual(['Preheat the oven.', 'Melt the butter.', 'Add the garlic.'])
     expect(splitNumberedStep('Bake 2. Then cool for 10 minutes.')).toEqual(['Bake 2. Then cool for 10 minutes.'])
     expect(splitNumberedStep('Use 2 cups flour and 3 eggs.')).toEqual(['Use 2 cups flour and 3 eggs.'])
+  })
+})
+
+
+describe('ingredient sections', () => {
+  const wprm = `<div class="wprm-recipe-container"><h2 class="wprm-recipe-name">Sugar Cookies</h2>
+    <div class="wprm-recipe-ingredient-group"><h4 class="wprm-recipe-group-name">Dough</h4><ul>
+      <li class="wprm-recipe-ingredient">4 cups flour</li>
+      <li class="wprm-recipe-ingredient">1 cup butter</li>
+      <li class="wprm-recipe-ingredient">1 cup sugar</li>
+    </ul></div>
+    <div class="wprm-recipe-ingredient-group"><h4 class="wprm-recipe-group-name">Frosting</h4><ul>
+      <li class="wprm-recipe-ingredient">2/3 cup flour</li>
+      <li class="wprm-recipe-ingredient">2 cups powdered sugar</li>
+      <li class="wprm-recipe-ingredient">4 tbsp butter</li>
+    </ul></div>
+    <div class="wprm-recipe-instruction-group"><h4 class="wprm-recipe-group-name">Dough</h4><ul>
+      <li class="wprm-recipe-instruction"><div class="wprm-recipe-instruction-text">Mix the flour, butter and sugar into a dough.</div></li>
+    </ul></div>
+    <div class="wprm-recipe-instruction-group"><h4 class="wprm-recipe-group-name">Frosting</h4><ul>
+      <li class="wprm-recipe-instruction"><div class="wprm-recipe-instruction-text">Beat the powdered sugar and butter, then whisk in the flour.</div></li>
+    </ul></div></div>`
+
+  it('keeps WPRM groups when the plugin wins', () => {
+    const r = fromPlugins(dom(page('', wprm)), U)!
+    expect(r.ingredients.map((g) => [g.title, g.items])).toEqual([
+      ['Dough', ['4 cups flour', '1 cup butter', '1 cup sugar']],
+      ['Frosting', ['2/3 cup flour', '2 cups powdered sugar', '4 tbsp butter']],
+    ])
+  })
+
+  it('lays a flat JSON-LD list over WPRM group headings', () => {
+    const html = page(
+      `<script type="application/ld+json">${JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Recipe',
+        name: 'Sugar Cookies',
+        image: 'https://example.com/cookies.jpg',
+        recipeIngredient: ['4 cups flour', '1 cup butter', '1 cup sugar', '2/3 cup flour', '2 cups powdered sugar', '4 tbsp butter'],
+        recipeInstructions: [
+          { '@type': 'HowToSection', name: 'Dough', itemListElement: [{ '@type': 'HowToStep', text: 'Mix the flour, butter and sugar into a dough.' }] },
+          { '@type': 'HowToSection', name: 'Frosting', itemListElement: [{ '@type': 'HowToStep', text: 'Beat the powdered sugar and butter, then whisk in the flour.' }] },
+        ],
+      })}</script>`,
+      wprm,
+    )
+    const r = parseRecipeHtml(html, U)!
+    expect(r.extractedVia).toBe('json-ld')
+    expect(r.ingredients.map((g) => g.title)).toEqual(['Dough', 'Frosting'])
+    expect(r.ingredients[0].items).toEqual(['4 cups flour', '1 cup butter', '1 cup sugar'])
+    expect(r.ingredients[1].items).toEqual(['2/3 cup flour', '2 cups powdered sugar', '4 tbsp butter'])
+    expect(r.instructions.map((g) => g.title)).toEqual(['Dough', 'Frosting'])
+  })
+
+  it('splits heading lines that landed in a flat recipeIngredient list', () => {
+    const html = page(`<script type="application/ld+json">${JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'Recipe',
+      name: 'Cinnamon Rolls',
+      recipeIngredient: ['For the dough:', '4 cups flour', '1 cup milk', 'For the frosting:', '2/3 cup flour', '4 oz cream cheese'],
+      recipeInstructions: ['Make the dough.', 'Frost the rolls.'],
+    })}</script>`)
+    const r = parseRecipeHtml(html, U)!
+    expect(r.ingredients.map((g) => [g.title, g.items])).toEqual([
+      ['For the dough', ['4 cups flour', '1 cup milk']],
+      ['For the frosting', ['2/3 cup flour', '4 oz cream cheese']],
+    ])
+  })
+
+  it('matches a flat list onto a page group list, and leaves it flat when unsure', () => {
+    const groups = [
+      { title: 'Dough', items: ['4 cups all-purpose flour', '1 cup butter'] },
+      { title: 'Frosting', items: ['2/3 cup flour', '2 cups powdered sugar'] },
+    ]
+    expect(regroupFromPage(['4 cups all-purpose flour', '1 cup butter', '2/3 cup flour', '2 cups powdered sugar'], groups)?.map((g) => g.title)).toEqual(['Dough', 'Frosting'])
+    expect(regroupFromPage(['1 mystery item', 'another mystery', 'and a third'], groups)).toBeUndefined()
+    expect(splitFlatHeadings([{ items: ['For the dough:', '4 cups flour', 'Frosting:', '2/3 cup flour'] }]).map((g) => g.title)).toEqual(['For the dough', 'Frosting'])
+  })
+
+  it('places ingredients under the step section that names them, only when the split is clean', () => {
+    const steps = [
+      { title: 'Dough', steps: ['Mix the flour, butter and sugar into a soft dough, then chill.'] },
+      { title: 'Frosting', steps: ['Beat the cream cheese and powdered sugar, then spread on the rolls.'] },
+    ]
+    const flat = ['4 cups flour', '1 cup butter', '1 cup sugar', '8 oz cream cheese', '2 cups powdered sugar']
+    const g = regroupBySteps(flat, steps)!
+    expect(g.map((x) => [x.title, x.items])).toEqual([
+      ['Dough', ['4 cups flour', '1 cup butter', '1 cup sugar']],
+      ['Frosting', ['8 oz cream cheese', '2 cups powdered sugar']],
+    ])
+    // two flours, one in each part, with unique anchors around them
+    const both = [
+      { title: 'Dough', steps: ['Mix the flour, butter and milk into a dough.'] },
+      { title: 'Frosting', steps: ['Beat the cream cheese, then whisk in the flour.'] },
+    ]
+    expect(regroupBySteps(['4 cups flour', '1 cup butter', '1 cup milk', '8 oz cream cheese', '2/3 cup flour'], both)?.map((x) => [x.title, x.items])).toEqual([
+      ['Dough', ['4 cups flour', '1 cup butter', '1 cup milk']],
+      ['Frosting', ['8 oz cream cheese', '2/3 cup flour']],
+    ])
+    // a crossed order, or nothing that names a section, stays flat
+    expect(regroupBySteps(['4 cups flour', '8 oz cream cheese', '1 cup butter', '2 cups powdered sugar'], steps)).toBeUndefined()
+    expect(regroupBySteps(['1 cup salt', '2 cups salt', '3 cups salt', '4 cups salt'], steps)).toBeUndefined()
   })
 })

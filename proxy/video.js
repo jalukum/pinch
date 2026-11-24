@@ -250,7 +250,7 @@ Rules:
 - One ingredient per line: amount + unit + ingredient (+ short prep), e.g. "2 cups all-purpose flour" or "3 cloves garlic, minced". Write spoken numbers as digits ("two and a half cups" -> "2 1/2 cups").
 - If the description lists exact amounts, use them. If no amount is given anywhere, write the ingredient alone, or the cook's own vague words ("a splash of milk", "salt, to taste"), and set uncertain=true.
 - If the cook gives two amounts (cups and grams), keep both: "2 cups (240 g) flour".
-- Use "group" only when the cook clearly splits the recipe (e.g. "Sauce", "Dough"); otherwise leave it empty.
+- Use "group" when the recipe has distinct parts the cook names (dough, frosting, sauce, filling, marinade, topping). Put each ingredient in its part. Leave group empty only when everything is one list.
 - steps: short imperative sentences, in the order the cook does them, keeping times, temperatures and doneness cues they say. Leave out chatter, jokes, sponsor reads and "like and subscribe".
 - notes: up to 4 useful tips the cook actually gives (substitutions, make-ahead, storage). No commentary of your own.
 - title: the dish's name, short (no hashtags, no channel name, no emojis).

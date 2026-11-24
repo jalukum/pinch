@@ -39,4 +39,19 @@ describe('video links', () => {
     expect(r.extractedVia).toBe('video')
     expect(r.notes.at(-1)).toMatch(/didn’t say exact amounts for: parmesan\./)
   })
+  it('keeps ingredient groups from the AI answer', () => {
+    const r = toParsed(
+      { is_recipe: true, title: 'Cinnamon Rolls', ingredients: [
+        { group: 'Dough', text: '4 cups flour' },
+        { group: 'Dough', text: '1 cup milk' },
+        { group: 'Frosting', text: '2/3 cup flour' },
+        { group: 'Frosting', text: '4 oz cream cheese' },
+      ], steps: ['Make the dough.', 'Frost the rolls.'], notes: [] },
+      { url: 'https://www.tiktok.com/@a/video/2', siteName: 'A · TikTok', heard: true },
+    )
+    expect(r.ingredients.map((g) => [g.title, g.items])).toEqual([
+      ['Dough', ['4 cups flour', '1 cup milk']],
+      ['Frosting', ['2/3 cup flour', '4 oz cream cheese']],
+    ])
+  })
 })
