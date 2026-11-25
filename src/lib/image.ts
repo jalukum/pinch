@@ -57,3 +57,62 @@ export async function cacheImage(src?: string): Promise<string | undefined> {
   }
   return undefined
 }
+
+/** Load a user photo, honouring EXIF orientation, as a bitmap. */
+async function bitmapFrom(blob: Blob): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: 'from-image' } as ImageBitmapOptions)
+  } catch {
+    const url = URL.createObjectURL(blob)
+    try {
+      const img = await new Promise<HTMLImageElement>((res, rej) => {
+        const i = new Image()
+        i.onload = () => res(i)
+        i.onerror = () => rej(new Error('Couldn’t open that photo'))
+        i.src = url
+      })
+      const c = document.createElement('canvas')
+      c.width = img.naturalWidth || img.width
+      c.height = img.naturalHeight || img.height
+      c.getContext('2d')!.drawImage(img, 0, 0)
+      return await createImageBitmap(c)
+    } finally {
+      URL.revokeObjectURL(url)
+    }
+  }
+}
+
+/**
+ * Downscale and compress a user photo to a JPEG data URL for storage.
+ * Long side is capped (default 1200px) at roughly quality 0.8.
+ */
+export async function fileToJpegDataUrl(file: Blob, maxSide = 1200, quality = 0.8): Promise<string> {
+  const bmp = await bitmapFrom(file)
+  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(bmp.width * scale))
+  c.height = Math.max(1, Math.round(bmp.height * scale))
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, c.width, c.height)
+  ctx.drawImage(bmp, 0, 0, c.width, c.height)
+  bmp.close()
+  const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/jpeg', quality))
+  if (!blob) throw new Error('Couldn’t write the photo')
+  return blobToDataUrl(blob)
+}
+
+/** A sharper, slightly larger canvas for OCR (text needs more pixels than a card thumbnail). */
+export async function canvasForOcr(file: Blob, maxSide = 2000): Promise<HTMLCanvasElement> {
+  const bmp = await bitmapFrom(file)
+  const scale = Math.min(2, maxSide / Math.max(bmp.width, bmp.height))
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(bmp.width * scale))
+  c.height = Math.max(1, Math.round(bmp.height * scale))
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(0, 0, c.width, c.height)
+  ctx.drawImage(bmp, 0, 0, c.width, c.height)
+  bmp.close()
+  return c
+}

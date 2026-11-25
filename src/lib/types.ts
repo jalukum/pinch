@@ -27,7 +27,7 @@ export interface Recipe {
   notes: string[]
   tags: string[]
   savedAt?: number
-  extractedVia?: 'json-ld' | 'microdata' | 'rdfa' | 'plugin' | 'next-data' | 'heuristic' | 'markdown' | 'text' | 'page' | 'manual' | 'video'
+  extractedVia?: 'json-ld' | 'microdata' | 'rdfa' | 'plugin' | 'next-data' | 'heuristic' | 'markdown' | 'text' | 'page' | 'manual' | 'video' | 'photo'
 }
 
 export type ParsedRecipe = Omit<Recipe, 'id' | 'savedAt' | 'imageData'>

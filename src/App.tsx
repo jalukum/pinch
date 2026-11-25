@@ -9,6 +9,7 @@ import { relayBase } from './lib/config'
 import { videoPlatform, recipeFromVideoLink, recipeFromVideoFile, VideoError, PLATFORM_NAME, type VideoStage, type VideoErrorKind, type VideoPlatform } from './lib/video'
 import { store, collectionStore, collectionsFromBackup, loadShop, saveShop, newId, requestPersistence, validateBackup, type Backup } from './lib/storage'
 import { cacheImage } from './lib/image'
+import { readRecipePhoto } from './lib/ocr'
 import { formatMinutes } from './lib/duration'
 import { hostLabel } from './lib/text'
 import { RecipeView } from './components/RecipeView'
@@ -21,7 +22,7 @@ import { Editor, PasteText } from './components/Editor'
 import { ThemeToggle } from './components/ThemeToggle'
 import { Backdrop } from './components/Backdrop'
 import { Divider, EmptyArt, Stamp, SvgDefs, Tape } from './components/Ornaments'
-import { IconBack, IconBasket, IconBox, IconClip, IconClock, IconFilm, IconFolder, IconNote, IconPencil, IconWhisk } from './components/Icons'
+import { IconBack, IconBasket, IconBox, IconCamera, IconClip, IconClock, IconFilm, IconFolder, IconNote, IconPencil, IconWhisk } from './components/Icons'
 
 type Route = { name: 'home' } | { name: 'recipe'; id: string } | { name: 'draft' } | { name: 'shop' } | { name: 'folder'; id: string }
 
@@ -77,6 +78,7 @@ export default function App() {
   const [pasteFor, setPasteFor] = useState<string | null>(null) // null = closed; '' = no link
   const [fussyOpen, setFussyOpen] = useState(false)
   const videoInput = useRef<HTMLInputElement>(null)
+  const photoInput = useRef<HTMLInputElement>(null)
   const abort = useRef<AbortController | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -227,6 +229,69 @@ export default function App() {
     }
   }
   const pickVideo = () => videoInput.current?.click()
+  const pickPhoto = () => photoInput.current?.click()
+
+  /** A photo of a recipe card or cookbook page → OCR → the text parser → the editor. */
+  const readPhoto = async (file: File) => {
+    abort.current?.abort()
+    const ctl = new AbortController()
+    abort.current = ctl
+    setStatus({ s: 'loading', url: '', step: 0, line: 'Opening the photo…' })
+    try {
+      const text = await readRecipePhoto(file, {
+        signal: ctl.signal,
+        onProgress: (line) => setStatus((cur) => (cur.s === 'loading' ? { ...cur, line } : cur)),
+      })
+      if (ctl.signal.aborted) return
+      if (!text || text.length < 8) {
+        setStatus({ s: 'idle' })
+        toast('I couldn’t read any text in that photo. Try a clearer, well-lit shot.')
+        return
+      }
+      const parsed = fromText(text)
+      setStatus({ s: 'idle' })
+      // Always open in the editor so the cook can fix letters the reader missed.
+      // Don’t attach the source photo — it’s usually a page of text, not a food picture.
+      if (parsed) {
+        setEditing({
+          recipe: { ...parsed, id: newId(), url: '', siteName: 'from a photo', extractedVia: 'photo' },
+          isNew: true,
+        })
+        toast('Check the card — photos can miss a letter or two')
+      } else {
+        const blank = blankRecipe(newId())
+        setEditing({
+          recipe: {
+            ...blank,
+            siteName: 'from a photo',
+            extractedVia: 'photo',
+            notes: text.split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 60),
+          },
+          isNew: true,
+        })
+        toast('Couldn’t sort that one; tidy it up here')
+      }
+    } catch (e: any) {
+      if (ctl.signal.aborted || e?.name === 'AbortError') return
+      setStatus({ s: 'idle' })
+      toast(e?.message || 'Couldn’t read that photo')
+    }
+  }
+
+  const setCardPhoto = async (recipe: Recipe, dataUrl?: string) => {
+    const rec: Recipe = { ...recipe, image: undefined, imageData: dataUrl }
+    try {
+      if (recipe.savedAt && recipes.some((x) => x.id === recipe.id)) {
+        await store.put(rec)
+        await refresh()
+      } else {
+        setDraft(rec)
+      }
+      toast(dataUrl ? (recipe.imageData || recipe.image ? 'Photo changed' : 'Photo added to the card') : 'Photo taken off the card')
+    } catch {
+      toast('That photo wouldn’t save on this phone')
+    }
+  }
 
   const save = async (r: Recipe) => {
     const rec: Recipe = { ...r, savedAt: Date.now() }
@@ -414,6 +479,7 @@ export default function App() {
         inShop={shop.entries.some((e) => e.id === current.id)}
         shopCount={shop.entries.length}
         onOpenShop={() => go('#/shop')}
+        onPhoto={(dataUrl) => setCardPhoto(current, dataUrl)}
       />
     )
   } else {
@@ -444,6 +510,7 @@ export default function App() {
         onWrite={writeByHand}
         onFussy={() => setFussyOpen(true)}
         onUpload={pickVideo}
+        onPhoto={pickPhoto}
         onShop={() => go('#/shop')}
         onCollect={(ids) => setCollectFor(ids)}
         onShopPicked={(ids) => {
@@ -545,6 +612,20 @@ export default function App() {
           }
         }}
       />
+      <input
+        ref={photoInput}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (f) {
+            if (route.name !== 'home' && route.name !== 'draft') go('#/')
+            readPhoto(f)
+          }
+        }}
+      />
 
       <div className={`toast ${toastMsg ? 'is-on' : ''}`} role="status" aria-live="polite">{toastMsg}</div>
     </>
@@ -576,6 +657,7 @@ function Home(p: {
   onWrite: (url?: string) => void
   onFussy: () => void
   onUpload: () => void
+  onPhoto: () => void
   onShop: () => void
   onCollect: (ids: string[]) => void
   onShopPicked: (ids: string[]) => void
@@ -736,6 +818,8 @@ function Home(p: {
         <p className="other-ways">
           <button className="inline-link" onClick={() => p.onPasteText('')}><IconNote size={16} /> Paste the recipe text</button>
           <span aria-hidden>·</span>
+          <button className="inline-link" onClick={p.onPhoto}><IconCamera size={16} /> Photograph a recipe</button>
+          <span aria-hidden>·</span>
           <button className="inline-link" onClick={p.onUpload}><IconFilm size={16} /> Upload a video</button>
           <span aria-hidden>·</span>
           <button className="inline-link" onClick={() => p.onWrite()}><IconPencil size={16} /> Write one by hand</button>
@@ -770,7 +854,7 @@ function Home(p: {
         {p.loaded && p.recipes.length === 0 && p.status.s !== 'loading' && !hasFolders && (
           <div className="empty">
             <EmptyArt />
-            <p className="hand">Nothing filed yet — paste a link from any recipe site or cooking video and I’ll write you a proper card.</p>
+            <p className="hand">Nothing filed yet — paste a link, photograph a cookbook page, or upload a cooking video and I’ll write you a proper card.</p>
           </div>
         )}
 
@@ -942,7 +1026,7 @@ function FussyNote({ onClose }: { onClose: () => void }) {
           <li key={f.name}><b>{f.name}</b> <span>{f.why}</span></li>
         ))}
       </ul>
-      <p className="hand-note">For these, open the recipe in Safari, tap aA → Show Reader, select all, copy, then choose “Paste the recipe text”. Or write the card by hand.</p>
+      <p className="hand-note">For these, open the recipe in Safari, tap aA → Show Reader, select all, copy, then choose “Paste the recipe text”. Or photograph the page, or write the card by hand.</p>
       <h3 className="fussy__sub">Cooking videos</h3>
       <p className="muted">Paste a TikTok, YouTube (Shorts too) or Instagram link. TikToks work best: Pinch reads the caption and listens to the chef. YouTube and Instagram only share the description, so Pinch uses that, or the written recipe it links to.</p>
       <p className="hand-note">Recipe only spoken out loud? Save the video, or screen-record the cooking part, then tap “Upload a video” and Pinch will listen to it.</p>

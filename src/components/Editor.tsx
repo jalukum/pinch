@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Recipe } from '../lib/types'
 import { fromFields, toFields, type EditFields } from '../lib/edit'
-import { IconBack } from './Icons'
+import { fileToJpegDataUrl } from '../lib/image'
+import { IconBack, IconCamera } from './Icons'
 import { Tape } from './Ornaments'
 
 /** Fix or fill a card by hand. Looks like writing on a ruled index card. */
 export function Editor({ recipe, isNew, onCancel, onDone }: { recipe: Recipe; isNew: boolean; onCancel: () => void; onDone: (r: Recipe) => void }) {
   const [f, setF] = useState<EditFields>(() => toFields(recipe))
+  const [photo, setPhoto] = useState<string | undefined>(recipe.imageData)
+  const photoIn = useRef<HTMLInputElement>(null)
   const title = useRef<HTMLInputElement>(null)
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -25,16 +28,18 @@ export function Editor({ recipe, isNew, onCancel, onDone }: { recipe: Recipe; is
         </button>
       </nav>
       <header className="recipe__head">
-        <p className="kicker">{recipe.url ? `from ${recipe.siteName}` : 'written by hand'}</p>
+        <p className="kicker">{recipe.url ? `from ${recipe.siteName}` : recipe.extractedVia === 'photo' ? 'from a photo' : recipe.extractedVia === 'video' ? 'heard in your video' : 'written by hand'}</p>
         <h1 id="edit-h" className="recipe__title">{isNew ? 'Write the card' : 'Fix up the card'}</h1>
-        <p className="hand-note">Fill in what’s missing. A line starting with ## starts a new group, like “## For the sauce”.</p>
+        {recipe.extractedVia === 'photo'
+          ? <p className="hand-note">I read this from your photo. Fix any words that came out wrong. A line starting with ## starts a new group, like “## For the sauce”.</p>
+          : <p className="hand-note">Fill in what’s missing. A line starting with ## starts a new group, like “## For the sauce”.</p>}
       </header>
 
       <form
         className="card card--ruled edit-card"
         onSubmit={(e) => {
           e.preventDefault()
-          if (canSave) onDone(fromFields(recipe, f))
+          if (canSave) onDone({ ...fromFields(recipe, f), imageData: photo })
         }}
       >
         <Tape className="tape--top" tone="sage" />
@@ -59,10 +64,37 @@ export function Editor({ recipe, isNew, onCancel, onDone }: { recipe: Recipe; is
           <span>Notes <em>optional</em></span>
           <textarea value={f.notes} onChange={set('notes')} rows={rows(f.notes, 2)} placeholder="Keeps three days in a tin." />
         </label>
-        <label className="ef">
-          <span>Photo link <em>optional</em></span>
-          <input value={f.image} onChange={set('image')} type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} placeholder="https://…/photo.jpg" />
-        </label>
+        <div className="ef">
+          <span>Photo <em>optional</em></span>
+          <div className="ef-photo">
+            {photo ? <img src={photo} alt="" /> : f.image ? <img src={f.image} alt="" /> : null}
+            <div className="ef-photo__ways">
+              <button type="button" className="inline-link" onClick={() => photoIn.current?.click()}>
+                <IconCamera size={16} /> {photo || f.image ? 'Change photo' : 'Add a photo'}
+              </button>
+              {(photo || f.image) && (
+                <button type="button" className="inline-link" onClick={() => { setPhoto(undefined); setF((x) => ({ ...x, image: '' })) }}>Take it off</button>
+              )}
+            </div>
+          </div>
+          <input
+            ref={photoIn}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (!file) return
+              try { setPhoto(await fileToJpegDataUrl(file)) }
+              catch { /* parent toast isn’t here; the preview simply won’t change */ }
+            }}
+          />
+          <label className="ef ef--nested">
+            <span>or a photo link</span>
+            <input value={f.image} onChange={set('image')} type="url" inputMode="url" autoCapitalize="off" autoCorrect="off" spellCheck={false} placeholder="https://…/photo.jpg" />
+          </label>
+        </div>
         <div className="edit-card__actions">
           <button type="button" className="btn btn--quiet" onClick={onCancel}>{isNew ? 'Back' : 'Cancel'}</button>
           <button type="submit" className="btn" disabled={!canSave}>{isNew ? 'Make the card' : 'Done'}</button>

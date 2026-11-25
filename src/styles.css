@@ -439,6 +439,28 @@ img { display: block; max-width: 100%; }
 :root[data-theme="dark"] .print { background: #efe5d4; }
 .print img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--paper-2); }
 .print__blank { aspect-ratio: 4 / 3; display: grid; place-items: center; background: repeating-linear-gradient(45deg, var(--paper-2) 0 10px, var(--paper) 10px 20px); font-family: var(--hand); font-size: 24px; color: #6b5545; }
+.print__blank--add {
+  width: 100%; border: 0; padding: 12px; cursor: pointer;
+  color: #6b5545; gap: 4px; place-items: center;
+}
+.print__blank--add svg { color: #8a6a4e; }
+.print__blank--add small {
+  font-family: var(--type); font-size: 11px; letter-spacing: .08em;
+  text-transform: uppercase; color: #8a6a4e;
+}
+.print__tools {
+  position: absolute; left: 10px; right: 10px; bottom: 7px;
+  display: flex; justify-content: center; align-items: center; gap: 8px;
+  font-family: var(--type); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: #6b5545;
+}
+.print__tools button {
+  background: none; border: 0; padding: 0; margin: 0;
+  color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit;
+  text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px;
+  cursor: pointer;
+}
+.print__tools button:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 2px; }
 @media (prefers-reduced-motion: no-preference) {
   .print { animation: settle .55s cubic-bezier(.2, .8, .3, 1) both; }
   @keyframes settle { from { opacity: 0; transform: translateY(10px) rotate(calc(var(--rot) + 2deg)); } }
@@ -776,6 +798,16 @@ body { background-image: var(--surface); background-attachment: fixed; }
 .ef ::placeholder { color: var(--ink-3); opacity: .6; }
 .ef-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .ef-row input { font-size: 22px; }
+.ef-photo { display: flex; align-items: center; gap: 14px; margin: 8px 0 4px; }
+.ef-photo img {
+  width: 84px; height: 63px; object-fit: cover; flex: none;
+  background: var(--paper-2);
+  box-shadow: 0 1px 3px rgba(40, 25, 15, .28);
+  transform: rotate(-1.4deg);
+}
+.ef-photo__ways { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.ef--nested { margin: 10px 0 0; }
+.ef--nested input { font-size: 20px; }
 .edit-card__actions { display: flex; gap: 10px; margin-top: 6px; }
 .edit-card__actions .btn { flex: 1; }
 .editor .hand-note { margin-left: 0; }

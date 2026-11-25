@@ -4,7 +4,8 @@ import { formatMinutes } from '../lib/duration'
 import { scaleIngredient, formatQty } from '../lib/scale'
 import { Divider, Stamp, Tape } from './Ornaments'
 import { relayImage } from '../lib/config'
-import { IconBack, IconBasket, IconFolder, IconLink, IconMinus, IconPencil, IconPlus, IconRefresh, IconShare, IconSun, IconTrash } from './Icons'
+import { fileToJpegDataUrl } from '../lib/image'
+import { IconBack, IconBasket, IconCamera, IconFolder, IconLink, IconMinus, IconPencil, IconPlus, IconRefresh, IconShare, IconSun, IconTrash } from './Icons'
 
 interface Props {
   recipe: Recipe
@@ -21,6 +22,7 @@ interface Props {
   inShop?: boolean
   shopCount?: number
   onOpenShop?: () => void
+  onPhoto?: (dataUrl?: string) => void
 }
 
 function useProgress(key: string) {
@@ -93,7 +95,7 @@ export function recipeAsText(r: Recipe, factor = 1): string {
   return lines.join('\n')
 }
 
-export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDelete, onEdit, partial, toast, onCollect, onAddToShop, inShop, shopCount, onOpenShop }: Props) {
+export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDelete, onEdit, partial, toast, onCollect, onAddToShop, inShop, shopCount, onOpenShop, onPhoto }: Props) {
   const [checks, setChecks] = useProgress(`pinch.progress.${r.id}`)
   const baseServings = r.servings && r.servings > 0 ? r.servings : undefined
   const [servings, setServings] = useState<number>(baseServings ?? 1)
@@ -103,10 +105,14 @@ export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDele
   const [imgTry, setImgTry] = useState(0)
   const img = r.imageData || (imgTry === 0 ? r.image : imgTry === 1 ? relayImage(r.image) : undefined)
   const imgOk = imgTry < 2 && !(imgTry === 1 && img === r.image)
+  const photoIn = useRef<HTMLInputElement>(null)
+  const hasPhoto = !!(img && imgOk)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [r.id])
+
+  useEffect(() => { setImgTry(0) }, [r.imageData, r.image])
 
   const toggle = (k: string) => setChecks((s) => {
     const n = { ...s }
@@ -185,17 +191,48 @@ export function RecipeView({ recipe: r, saved, justSaved, onBack, onSave, onDele
         <figure className="print" style={{ ['--rot' as any]: `${rot}deg` }}>
           <Tape className="tape--tl" />
           <Tape className="tape--tr" tone="sage" />
-          {img && imgOk ? (
+          {hasPhoto ? (
             <img src={img} alt="" onError={() => setImgTry((n) => n + 1)} decoding="async" />
+          ) : onPhoto ? (
+            <button type="button" className="print__blank print__blank--add" onClick={() => photoIn.current?.click()}>
+              <IconCamera size={28} />
+              <span>Add a photo</span>
+              <small>of the finished dish, if you like</small>
+            </button>
           ) : (
             <div className="print__blank"><span>no photo, just good food</span></div>
+          )}
+          {onPhoto && hasPhoto && (
+            <div className="print__tools">
+              <button type="button" onClick={() => photoIn.current?.click()}>Change photo</button>
+              <span aria-hidden>·</span>
+              <button type="button" onClick={() => onPhoto(undefined)}>Take it off</button>
+            </div>
+          )}
+          {onPhoto && (
+            <input
+              ref={photoIn}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (!f) return
+                try {
+                  onPhoto(await fileToJpegDataUrl(f))
+                } catch {
+                  toast('Couldn’t use that photo')
+                }
+              }}
+            />
           )}
         </figure>
       </div>
 
       <header className="recipe__head">
         <p className="kicker">
-          {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer">from {r.siteName || 'the web'} <IconLink size={14} /></a> : <span>{r.extractedVia === 'video' ? 'heard in your video' : 'written by hand'}</span>}
+          {r.url ? <a href={r.url} target="_blank" rel="noopener noreferrer">from {r.siteName || 'the web'} <IconLink size={14} /></a> : <span>{r.extractedVia === 'video' ? 'heard in your video' : r.extractedVia === 'photo' ? 'from a photo' : 'written by hand'}</span>}
         </p>
         <h1 id="recipe-title" className="recipe__title">{r.title}</h1>
         {r.author && <p className="byline">by {r.author}</p>}

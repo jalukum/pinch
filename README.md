@@ -1,6 +1,6 @@
 # Pinch: a little recipe box
 
-Paste a link to any recipe, and Pinch turns it into a clean, heirloom-style recipe card that you can file in your box.
+Paste a link, a block of text, or a photo of a recipe, and Pinch turns it into a clean, heirloom-style recipe card that you can file in your box.
 Cards open offline, too.
 
 * Vite + React + TypeScript, with no UI framework. Fonts are bundled: Fraunces, Literata, Courier Prime and Caveat (all OFL).
@@ -75,6 +75,12 @@ cook never says are kept as said ("a splash of milk") and listed gently in a not
 neurons per minute of audio, writing a card ≈ 40–250. So about 3 hours of listening a day, or hundreds of caption-based
 cards. When it runs out, Pinch says so; a caption that already holds a full written recipe is still sorted the old way.
 Answers are edge-cached (videos 6 h, cards 7 days), so re-pasting the same link costs nothing.
+
+## Photograph a recipe
+
+Under the paste bar, **Photograph a recipe** opens the camera or photo library. Pinch reads the text on the device (Tesseract.js, loaded from a CDN the first time you use it), runs it through the same pasted-text parser, and opens the card in the editor so you can fix any missed letters. A photo of a cookbook page isn’t used as the card picture — add a food photo afterwards if you like.
+
+On any card, **Add a photo** (or **Change photo** / **Take it off**) saves a compressed JPEG with the recipe in IndexedDB, so it stays available offline.
 
 ## Themes
 
